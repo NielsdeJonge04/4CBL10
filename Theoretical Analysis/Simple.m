@@ -5,11 +5,11 @@
 % Data voor 69 cycles (maximale van de Smetec, de OGO gensets kunnen in principe “onbeperkt” aan)
 % 
 %% init
-clear all; clc;close all;
+clear; clc;close;
 addpath( "Functions","Nasa");
 %% Units
 mm      = 1e-3;dm=0.1;
-bara    = 1e5;
+bara    = 1e5;   %bar to pascal
 MJ      = 1e6;
 kWhr    = 1000*3600;
 volperc = 0.01; % Emissions are in volume percentages
@@ -18,22 +18,22 @@ g       = 1e-3;
 s       = 1;
 %% Load NASA maybe you need it at some point?
 % Global (for the Nasa database in case you wish to use it).
-global Runiv
+% global Runiv % Check if actually needed
 Runiv = 8.314;
 [SpS,El]        = myload('Nasa\NasaThermalDatabase.mat',{'Diesel','O2','N2','CO2','H2O'});
-%% Engine geom data (check if these are correct)
+%% Engine geom data (check if these are correct) (get this data from the rest)
 Cyl.Bore                = 104*mm;
 Cyl.Stroke              = 85*mm;
 Cyl.CompressionRatio    = 21.5;
 Cyl.ConRod              = 136.5*mm;
 Cyl.TDCangle            = 180;
 % -- Valve closing events can sometimes be seen in fast oscillations in the pressure signal (due
-% to the impact when the Valve hits its seat).
-CaIVO = -355;
-CaIVC = -135;
-CaEVO = 149;
-CaEVC = -344;
-CaSOI = -3.2;
+% to the impact when the Valve hits its seat). 
+CaIVO = -355; % Intake valve open angle
+CaIVC = -135; % Intake valve closing angle
+CaEVO = 149; % Exhaust valve opening angle
+CaEVC = -344; % Exhaust valve closing angle
+CaSOI = -3.2; % Start of Injection Angle
 % Write a function [V] = CylinderVolume(Ca,Cyl) that will give you Volume
 % for the given Cyl geometry. If you can do that you can create pV-diagrams
 %% Load data (if txt file)
@@ -56,19 +56,19 @@ YLIM = ylim;
 % Add some extras to the plot
 line([CaIVC CaIVC],YLIM,'LineWidth',1,'Color','b'); % Plot a vertical line at IVC. Just for reference not a particular reason.
 line([CaEVO CaEVO],YLIM,'LineWidth',1,'Color','r'); % Plot a vertical line at EVO. Just for reference not a particular reason.
-set(gca,'XTick',[-360:60:360],'XGrid','on','YGrid','on');        % I like specific axis labels. Matter of taste
+set(gca,'XTick',-360:60:360,'XGrid','on','YGrid','on');        % I like specific axis labels. Matter of taste
 title('All cycles in one plot.')
 
 
 %% pV-diagram
-V = CylinderVolume(Ca(:,iselect),Cyl);
+V = CylinderVolume(Ca(:,iselect),Cyl);x
 f2 = figure(2);
 set(f2,'Position',[ 200 400 600 800]);              % Just a size I like. Your choice
 subplot(2,1,1)
 plot(V/dm^3,p(:,iselect)/bara);
 xlabel('V [dm^3]');ylabel('p [bar]');               % Always add axis labels
 xlim([0 0.8]);ylim([0.5 50]);                      % Matter of taste
-set(gca,'XTick',[0:0.1:0.8],'XGrid','on','YGrid','on');        % I like specific axis labels. Matter of taste
+set(gca,'XTick',0:0.1:0.8,'XGrid','on','YGrid','on');        % I like specific axis labels. Matter of taste
 title({'pV-diagram','(with wrong Volume function btw)'})
 subplot(2,1,2)
 loglog(V/dm^3,p(:,iselect)/bara);
