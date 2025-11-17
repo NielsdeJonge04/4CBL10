@@ -16,26 +16,129 @@ volperc = 0.01; % Emissions are in volume percentages
 ppm     = 1e-6; % Some are in ppm (also a volume- not a mass-fraction)
 g       = 1e-3;
 s       = 1;
+kelvin  = 273.15;
 %% Load NASA maybe you need it at some point?
 % Global (for the Nasa database in case you wish to use it).
-% global Runiv % Check if actually needed
+global Runiv 
 Runiv = 8.314;
-[SpS,El]        = myload('Nasa\NasaThermalDatabase.mat',{'Diesel','O2','N2','CO2','H2O'});
+TdataBase=fullfile('Nasa','NasaThermalDatabase');
+load(TdataBase);
+
+% Select species for the case at hand
+iSp = myfind({Sp.Name},{'Diesel','O2','N2','CO2','H2O'});                      % Find indexes of these species
+SpS=Sp(iSp);                                                                % Subselection of the database in the order
+NSp = length(SpS);
+Mi = [SpS.Mass];
+
 %% Engine geom data (check if these are correct) (get this data from the rest)
 Cyl.Bore                = 104*mm;
 Cyl.Stroke              = 85*mm;
 Cyl.CompressionRatio    = 21.5;
 Cyl.ConRod              = 136.5*mm;
-Cyl.TDCangle            = 180;
+Cyl.TDCangle            = 0;
 % -- Valve closing events can sometimes be seen in fast oscillations in the pressure signal (due
-% to the impact when the Valve hits its seat). 
+% to the impact when the Valve hits its seat).  (obsolute I think)
 CaIVO = -355; % Intake valve open angle
 CaIVC = -135; % Intake valve closing angle
 CaEVO = 149; % Exhaust valve opening angle
 CaEVC = -344; % Exhaust valve closing angle
 CaSOI = -3.2; % Start of Injection Angle
-% Write a function [V] = CylinderVolume(Ca,Cyl) that will give you Volume
-% for the given Cyl geometry. If you can do that you can create pV-diagrams
+% Maximal and minimal values of the Cylinder sizing
+Vmin = CylinderVolume(0,Cyl);
+Vmax = CylinderVolume(180,Cyl);
+
+%% Base Variables
+% Base conditions (please update these with correct values later on)
+pamb = 1*bara; %ambient pressure of 1 bar 
+Tamb = 21+kelvin; %ambient temperature converted to Kelvin
+Fuelcomposition = 'CH4';
+Q_LHV = 1; %NEEDS A UPDATE
+
+% air composition
+Xair = [0 0.21 0.79 0 0];                                                   % Molar fraction air composition
+MAir = Xair*Mi';                                                            
+Yair = Xair.*Mi/MAir;                                                       % mass fraction air
+
+%% Thermodynamical Analysis of the engine Cycle
+% Reserved for comments
+
+%% Compression Cycle
+p1 = pamb;
+V1 = Vmax;
+V2 = Vmin;
+T1 = Tamb;
+R1 = Runiv/MAir;
+
+% mass of air in cylinder
+m_air = (p1*V1)/(R1*T1);
+
+% Use NASA tables for cp and cv
+for i = 1:NSp
+    Cpi1(i) = CpNasa(T1, SpS(i));
+    Cvi1(i) = CvNasa(T1, SpS(i));
+end
+cp1 = Yair * Cpi1';
+cv1 = Yair * Cvi1';
+gamma1 = cp1/cv1;
+% define function for compression values
+p_compression = @(Vcom) p1 * (V1 ./ Vcom).^gamma1;
+
+% Create vector Vc (this will need to be adjusted if you want to do the crank angle based version
+Vc = vmin:1000:vmax; % Create a vector of compression volumes
+
+% Calculate pressure changes over volume
+p_comp = p_compression(Vc); % Calculate pressures during compression
+p2 = p_compression(V2);
+
+%end temperature
+T2 = (p2*V2)/(m_air*R1);
+
+
+%% Combustion
+% AF ratio for fuel injected for now can be changed later to just plain
+% fuel mass
+mfuelinj = 1;                                                               %fuel injected per cycle (NEEDS TO BE FOUND STILL)
+mabsair = Yair .* m_air;
+mtot = mair + mfuelinj;
+mabsair(1) = mfuelinj;
+
+%calculate new mass and molar fractions
+Yprecomb = mabsair ./ mtot;                                                 % Mass fraction of pre combustion mix
+Mmixpre = mabsair ./ Mi;                                                    % Moles pre burn
+Xprecomb = Mmixpre ./ sum(Mmixpre);                                         % molar fractions of pre combustion mix
+
+% Post combustion molar and mass fractions
+Cr = combustion_coefficients(Fuelcomposition);                              % combustion ratios 
+Mmixpost = Mmixpre+(Mmixpre(1)*Cr);                                         % Molar Mix post burn
+Xpostcomb = Mmixpost ./ sum(Mmixpost);
+Mpostcomb = Xpostcomb*Mi'; 
+Ypostcomb = Xpostcomb.*Mi/Mpostcomb;
+
+% Use NASA tables for new cp and cv
+for i = 1:NSp
+    Cpi2(i) = CpNasa(T3, SpS(i));
+    Cvi2(i) = CvNasa(T3, SpS(i));
+end
+cp2 = Yair * Cpi2';
+cv2 = Yair * Cvi2';
+gamma2 = cp2/cv2;
+R3 = Runiv/Mpostcomb;
+
+% Fuel mass flow is still needed to be found
+Q_in = mfuel*Q_LHV;
+T3 = T2 + (Q_in/(cp2(mtot)));
+
+% post combustion pressure
+p3 = p2;
+
+% post combustion Volume
+
+V3 = (mtot*R3*T3)/p3;
+
+%% Data Analysis
+% Below is given the code for the data analysis and viewing (NOT YET
+% IMPLEMENTED)
+
 %% Load data (if txt file)
 FullName        = fullfile('Data','ExampleDataSet.txt');
 dataIn          = table2array(readtable(FullName));
@@ -61,7 +164,7 @@ title('All cycles in one plot.')
 
 
 %% pV-diagram
-V = CylinderVolume(Ca(:,iselect),Cyl);x
+V = CylinderVolume(Ca(:,iselect),Cyl);
 f2 = figure(2);
 set(f2,'Position',[ 200 400 600 800]);              % Just a size I like. Your choice
 subplot(2,1,1)
