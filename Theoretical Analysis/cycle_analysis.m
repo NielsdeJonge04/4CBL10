@@ -83,8 +83,12 @@ gamma1 = cp1/cv1;
 % define function for compression values
 p_compression = @(Vcom) p1 * (V1 ./ Vcom).^gamma1;
 
+disp(['Vmin = ', num2str(Vmin)])
+disp(['Vmax = ', num2str(Vmax)])
+disp(['Difference = ', num2str(Vmax - Vmin)])
+
 % Create vector Vc (this will need to be adjusted if you want to do the crank angle based version
-Vc = vmin:1000:vmax; % Create a vector of compression volumes
+Vc = linspace(Vmin, Vmax, 100);  % Creates 100 points from Vmin down to Vmax
 
 % Calculate pressure changes over volume
 p_comp = p_compression(Vc); % Calculate pressures during compression
@@ -99,7 +103,7 @@ T2 = (p2*V2)/(m_air*R1);
 % fuel mass
 mfuelinj = 1;                                                               %fuel injected per cycle (NEEDS TO BE FOUND STILL)
 mabsair = Yair .* m_air;
-mtot = mair + mfuelinj;
+mtot = m_air + mfuelinj;
 mabsair(1) = mfuelinj;
 
 %calculate new mass and molar fractions
@@ -114,6 +118,10 @@ Xpostcomb = Mmixpost ./ sum(Mmixpost);
 Mpostcomb = Xpostcomb*Mi'; 
 Ypostcomb = Xpostcomb.*Mi/Mpostcomb;
 
+% Fuel mass flow is still needed to be found
+Q_in = mfuelinj*Q_LHV;
+T3 = T2 + (Q_in/(cp1*mtot));
+
 % Use NASA tables for new cp and cv
 for i = 1:NSp
     Cpi2(i) = CpNasa(T3, SpS(i));
@@ -123,10 +131,6 @@ cp2 = Yair * Cpi2';
 cv2 = Yair * Cvi2';
 gamma2 = cp2/cv2;
 R3 = Runiv/Mpostcomb;
-
-% Fuel mass flow is still needed to be found
-Q_in = mfuel*Q_LHV;
-T3 = T2 + (Q_in/(cp2(mtot)));
 
 % post combustion pressure
 p3 = p2;

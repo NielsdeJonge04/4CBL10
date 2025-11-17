@@ -26,7 +26,7 @@ load(TdataBase);
 
 % Select species for the case at hand
 iSp = myfind({Sp.Name},{'Diesel','O2','N2','CO2','H2O'});                      % Find indexes of these species
-SpS=Sp(iSp);                                                                % Subselection of the database in the order according to {'Gasoline','O2','CO2','H2O','N2'}
+SpS=Sp(iSp);                                                                % Subselection of the database in the order
 NSp = length(SpS);
 Mi = [SpS.Mass];
 
@@ -54,7 +54,6 @@ Tamb = 21+kelvin; %ambient temperature converted to Kelvin
 Fuelcomposition = 'CH4';
 Q_LHV = 1; %NEEDS A UPDATE
 
-
 % air composition
 Xair = [0 0.21 0.79 0 0];                                                   % Molar fraction air composition
 MAir = Xair*Mi';                                                            
@@ -80,12 +79,12 @@ for i = 1:NSp
 end
 cp1 = Yair * Cpi1';
 cv1 = Yair * Cvi1';
-gamma = cp1/cv1;
+gamma1 = cp1/cv1;
 % define function for compression values
-p_compression = @(Vcom) p1 * (V1 ./ Vcom).^gamma;
+p_compression = @(Vcom) p1 * (V1 ./ Vcom).^gamma1;
 
 % Create vector Vc (this will need to be adjusted if you want to do the crank angle based version
-Vc = linspace(Vmin, Vmax, 1000); % Create a vector of compression volumes
+Vc = Vmin:1000:Vmax % Create a vector of compression volumes
 
 % Calculate pressure changes over volume
 p_comp = p_compression(Vc); % Calculate pressures during compression
@@ -96,10 +95,45 @@ T2 = (p2*V2)/(m_air*R1);
 
 
 %% Combustion
-% Fuel mass flow is still needed to be found
-Q_in = mfuel*Q_LHV;
-T3 = T2 + ()
+% AF ratio for fuel injected for now can be changed later to just plain
+% fuel mass
+mfuelinj = 1;                                                               %fuel injected per cycle (NEEDS TO BE FOUND STILL)
+mabsair = Yair .* m_air;
+mtot = m_air + mfuelinj;
+mabsair(1) = mfuelinj;
 
+%calculate new mass and molar fractions
+Yprecomb = mabsair ./ mtot;                                                 % Mass fraction of pre combustion mix
+Mmixpre = mabsair ./ Mi;                                                    % Moles pre burn
+Xprecomb = Mmixpre ./ sum(Mmixpre);                                         % molar fractions of pre combustion mix
+
+% Post combustion molar and mass fractions
+Cr = combustion_coefficients(Fuelcomposition);                              % combustion ratios 
+Mmixpost = Mmixpre+(Mmixpre(1)*Cr);                                         % Molar Mix post burn
+Xpostcomb = Mmixpost ./ sum(Mmixpost);
+Mpostcomb = Xpostcomb*Mi'; 
+Ypostcomb = Xpostcomb.*Mi/Mpostcomb;
+
+% Fuel mass flow is still needed to be found
+Q_in = mfuelinj*Q_LHV;
+T3 = T2 + (Q_in/(cp1*mtot));
+
+% Use NASA tables for new cp and cv
+for i = 1:NSp
+    Cpi2(i) = CpNasa(T3, SpS(i));
+    Cvi2(i) = CvNasa(T3, SpS(i));
+end
+cp2 = Yair * Cpi2';
+cv2 = Yair * Cvi2';
+gamma2 = cp2/cv2;
+R3 = Runiv/Mpostcomb;
+
+% post combustion pressure
+p3 = p2;
+
+% post combustion Volume
+
+V3 = (mtot*R3*T3)/p3;
 
 %% Data Analysis
 % Below is given the code for the data analysis and viewing (NOT YET
