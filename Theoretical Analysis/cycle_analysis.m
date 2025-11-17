@@ -88,7 +88,7 @@ disp(['Vmax = ', num2str(Vmax)])
 disp(['Difference = ', num2str(Vmax - Vmin)])
 
 % Create vector Vc (this will need to be adjusted if you want to do the crank angle based version
-Vc = linspace(Vmin, Vmax, 100);  % Creates 100 points from Vmin down to Vmax
+Vc = linspace(Vmin, Vmax, 100);
 
 % Calculate pressure changes over volume
 p_comp = p_compression(Vc); % Calculate pressures during compression
@@ -138,6 +138,31 @@ p3 = p2;
 % post combustion Volume
 
 V3 = (mtot*R3*T3)/p3;
+
+
+%% Expansion Cycle
+V4=Vmax;
+% define function for compression values
+p_expansion = @(Vexp) p3 * (V3 ./ Vexp).^gamma2;
+
+% Create vector Vc (this will need to be adjusted if you want to do the crank angle based version
+Ve = linspace(V3, V4, 100);  
+
+% Calculate pressure changes over volume
+p_exp = p_compression(Vc); % Calculate pressures during compression
+p4 = p_compression(V4);
+
+%end temperature
+T4 = (p4*V4)/(mtot*R3);
+
+%% Exhaust cycle
+p_exhaust = 1; % FIND THIS VALUE
+v_5 = Vmin;
+p_5 = p_exhaust;
+
+%% Intake cycle
+v_6 = Vmax;
+p_6 = pamb;
 
 %% Data Analysis
 % Below is given the code for the data analysis and viewing (NOT YET
