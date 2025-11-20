@@ -237,7 +237,7 @@ Ca              = reshape(dataIn(:,1),[],Ncycles); % Both p and Ca are now matri
 p_measured               = reshape(dataIn(:,2),[],Ncycles)*bara; % type 'help reshape' in the command window if you want to know what it does (reshape is a Matlab buit-in command
 %% Plotting 
 f1=figure(1);
-set(f1,'Position',[ 200 800 1200 400]);             % Just a size I like. Your choice
+% set(f1,'Position',[ 200 800 1200 400]);             % Just a size I like. Your choice
 pp = plot(Ca,p_measured/bara,'LineWidth',1);                 % Plots the whole matrix
 xlabel('Ca');ylabel('p [bar]');                     % Always add axis labels
 xlim([-360 360]);ylim([0 50]);                      % Matter of taste
@@ -254,7 +254,7 @@ title('All cycles in one plot.')
 %% pV-diagram
 V_measured = CylinderVolume(Ca(:,iselect),Cyl);
 f2 = figure(2);
-set(f2,'Position',[ 200 400 600 800]);              % Just a size I like. Your choice
+% set(f2,'Position',[ 200 400 600 800]);              % Just a size I like. Your choice
 subplot(2,1,1)
 plot(V_measured/dm^3,p_measured(:,iselect)/bara);
 xlabel('V [dm^3]');ylabel('p [bar]');               % Always add axis labels
@@ -300,4 +300,70 @@ ylabel('Pressure (Pa)');
 title('p-V Diagram - Engine Cycle');
 legend('Location', 'best');
 grid on;
+hold off;
+
+%% Merged p-V diagram with theoretical and measured data
+figure;
+% set(gcf, 'Position', [200 400 1000 800]);
+
+% Subplot 1: Linear scale with both theoretical strokes and measured data
+hold on;
+
+% Theoretical cycle with different colors for each stroke
+% Intake stroke: -360° to -180° (blue)
+intake_indices = (Ca > -360) & (Ca <= -180);
+intake_indices = intake_indices(1:length(V_theory));
+plot(V_theory(intake_indices)/dm^3, p_theory(intake_indices)/bara, 'b-', 'LineWidth', 2, 'DisplayName', 'Intake (Theory)');
+
+% Compression stroke: -180° to 0° (red)
+compression_indices = (Ca > -180) & (Ca <= 0);
+compression_indices = compression_indices(1:length(V_theory));
+plot(V_theory(compression_indices)/dm^3, p_theory(compression_indices)/bara, 'r-', 'LineWidth', 2, 'DisplayName', 'Compression (Theory)');
+
+% Expansion/Power stroke: 0° to 180° (green)
+expansion_indices = (Ca > 0) & (Ca <= 180);
+expansion_indices = expansion_indices(1:length(V_theory));
+plot(V_theory(expansion_indices)/dm^3, p_theory(expansion_indices)/bara, 'g-', 'LineWidth', 2, 'DisplayName', 'Expansion (Theory)');
+
+% Exhaust stroke: 180° to 360° (magenta)
+exhaust_indices = (Ca > 180) & (Ca <= 360);
+exhaust_indices = exhaust_indices(1:length(V_theory));
+plot(V_theory(exhaust_indices)/dm^3, p_theory(exhaust_indices)/bara, 'm-', 'LineWidth', 2, 'DisplayName', 'Exhaust (Theory)');
+
+% Measured data
+V_measured = CylinderVolume(Ca(:,iselect), Cyl);
+plot(V_measured/dm^3, p_measured(:,iselect)/bara, 'k--', 'LineWidth', 1.5, 'DisplayName', 'Measured');
+
+xlabel('V [dm³]');
+ylabel('p [bar]');
+title('p-V Diagram - Engine Cycle (Linear Scale)');
+legend('Location', 'best');
+xlim([0 0.8]);
+ylim([0.5 50]);
+set(gca, 'XTick', 0:0.1:0.8, 'XGrid', 'on', 'YGrid', 'on');
+grid on;
+hold off;
+
+% % Subplot 2: Log-log scale
+% subplot(2,1,2);
+% hold on;
+% 
+% % Theoretical cycle (log-log)
+% loglog(V_theory(intake_indices)/dm^3, p_theory(intake_indices)/bara, 'b-', 'LineWidth', 2, 'DisplayName', 'Intake (Theory)');
+% loglog(V_theory(compression_indices)/dm^3, p_theory(compression_indices)/bara, 'r-', 'LineWidth', 2, 'DisplayName', 'Compression (Theory)');
+% loglog(V_theory(expansion_indices)/dm^3, p_theory(expansion_indices)/bara, 'g-', 'LineWidth', 2, 'DisplayName', 'Expansion (Theory)');
+% loglog(V_theory(exhaust_indices)/dm^3, p_theory(exhaust_indices)/bara, 'm-', 'LineWidth', 2, 'DisplayName', 'Exhaust (Theory)');
+% 
+% % Measured data (log-log)
+% loglog(V_measured/dm^3, p_measured(:,iselect)/bara, 'k--', 'LineWidth', 1.5, 'DisplayName', 'Measured');
+% 
+% xlabel('V [dm³]');
+% ylabel('p [bar]');
+% title('p-V Diagram - Engine Cycle (Log-Log Scale)');
+% legend('Location', 'best');
+% xlim([0.02 0.8]);
+% ylim([0.5 50]);
+% set(gca, 'XTick', [0.02 0.05 0.1 0.2 0.5 0.8], ...
+%     'YTick', [0.5 1 2 5 10 20 50], 'XGrid', 'on', 'YGrid', 'on');
+% grid on;
 hold off;
