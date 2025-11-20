@@ -52,8 +52,8 @@ Vmax = CylinderVolume(180,Cyl);
 pamb = 1*bara; %ambient pressure of 1 bar 
 Tamb = 21+kelvin; %ambient temperature converted to Kelvin
 Fuelcomposition = 'CH4';
-Q_LHV = 1; %NEEDS A UPDATE
-mfuelinj = 0.001;                                                               %fuel injected per cycle in kg (NEEDS TO BE FOUND STILL)
+Q_LHV = 29.6*MJ; %NEEDS A UPDATE
+mfuelinj = 0.00004046;                                                      %fuel injected per cycle in kg (NEEDS TO BE FOUND STILL)
 p_exhaust = pamb+1*bara; % pressure of exhaust in bar
 
 % air composition
@@ -220,9 +220,8 @@ p_theory(1) = p_exhaust;
 %% Data Analysis
 % Below is given the code for the data analysis and viewing (NOT YET
 % IMPLEMENTED)
-
 % work done by system
-W_theoretical = Q_in - Q_out - (p_exhaust-pamb)*(Vmax-Vmin)
+W_theoretical = Q_in - Q_out - (p_exhaust-pamb)*(Vmax-Vmin);
 % Calculation of work goes here
 
 % reserved for bugfixing can be removed later
