@@ -54,6 +54,7 @@ Tamb = 21+kelvin; %ambient temperature converted to Kelvin
 Fuelcomposition = 'CH4';
 Q_LHV = 1; %NEEDS A UPDATE
 mfuelinj = 0.001;                                                               %fuel injected per cycle in kg (NEEDS TO BE FOUND STILL)
+p_exhaust = pamb+1*bara; % pressure of exhaust in bar
 
 % air composition
 Xair = [0 0.21 0.79 0 0];                                                   % Molar fraction air composition
@@ -74,6 +75,9 @@ V_theory = CylinderVolume(Ca , Cyl);
 
 % Create pressure vector
 p_theory = zeros(size(Ca)); % Initialize pressure vector
+
+
+
 
 %% Thermodynamical Analysis of the engine Cycle
 % Reserved for comments
@@ -138,7 +142,7 @@ Xpostcomb = Mmixpost ./ sum(Mmixpost);
 Mpostcomb = Xpostcomb*Mi'; 
 Ypostcomb = Xpostcomb.*Mi/Mpostcomb;
 
-% Fuel mass flow is still needed to be found
+% Temperature increase due to fuel burn
 Q_in = mfuelinj*Q_LHV;
 T3 = T2 + (Q_in/(cp1*mtot));
 
@@ -199,8 +203,10 @@ p4 = p_expansion(V4);
 %end temperature
 T4 = (p4*V4)/(mtot*R3);
 
+% heat lost
+Q_out = cv2*mtot*(T4-T1);
+
 %% Exhaust cycle
-p_exhaust = pamb+1*bara; % FIND THIS VALUE
 v_5 = Vmin;
 p_5 = p_exhaust;
 
@@ -216,7 +222,11 @@ p_theory(1) = p_exhaust;
 % IMPLEMENTED)
 
 % work done by system
+W_theoretical = Q_in - Q_out - (p_exhaust-pamb)*(Vmax-Vmin)
 % Calculation of work goes here
+
+% reserved for bugfixing can be removed later
+
 
 %% Load data (if txt file)
 FullName        = fullfile('Data','ExampleDataSet.txt');
@@ -259,3 +269,36 @@ xlim([0.02 0.8]);ylim([0 50]);                      % Matter of taste
 set(gca,'XTick',[0.02 0.05 0.1 0.2 0.5 0.8],...
     'YTick',[0.5 1 2 5 10 20 50],'XGrid','on','YGrid','on');        % I like specific axis labels. Matter of taste
 title({'pV-diagram','(with wrong Volume function btw)'})
+
+
+%% Plot p-V diagram with different colors for each stroke
+
+figure;
+hold on;
+
+% Intake stroke: -360° to -180° (e.g., blue)
+intake_indices = (Ca > -360) & (Ca <= -180);
+intake_indices = intake_indices(1:length(V_theory));
+plot(V_theory(intake_indices), p_theory(intake_indices), 'b-', 'LineWidth', 2, 'DisplayName', 'Intake');
+
+% Compression stroke: -180° to 0° (e.g., red)
+compression_indices = (Ca > -180) & (Ca <= 0);
+compression_indices = compression_indices(1:length(V_theory));
+plot(V_theory(compression_indices), p_theory(compression_indices), 'r-', 'LineWidth', 2, 'DisplayName', 'Compression');
+
+% Expansion/Power stroke: 0° to 180° (e.g., green)
+expansion_indices = (Ca > 0) & (Ca <= 180);
+expansion_indices = expansion_indices(1:length(V_theory));
+plot(V_theory(expansion_indices), p_theory(expansion_indices), 'g-', 'LineWidth', 2, 'DisplayName', 'Expansion');
+
+% Exhaust stroke: 180° to 360° (e.g., magenta)
+exhaust_indices = (Ca > 180) & (Ca <= 360) & 1;
+exhaust_indices = exhaust_indices(1:length(V_theory));
+plot(V_theory(exhaust_indices), p_theory(exhaust_indices), 'm-', 'LineWidth', 2, 'DisplayName', 'Exhaust');
+
+xlabel('Volume (m³)');
+ylabel('Pressure (Pa)');
+title('p-V Diagram - Engine Cycle');
+legend('Location', 'best');
+grid on;
+hold off;
