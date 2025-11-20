@@ -53,7 +53,7 @@ pamb = 1*bara; %ambient pressure of 1 bar
 Tamb = 21+kelvin; %ambient temperature converted to Kelvin
 Fuelcomposition = 'CH4';
 Q_LHV = 29.6*MJ; %NEEDS A UPDATE
-mfuelinj = 0.00004046;                                                      %fuel injected per cycle in kg (NEEDS TO BE FOUND STILL)
+mfuelinj = 1.1*10^-5;                                                      %fuel injected per cycle in kg (NEEDS TO BE FOUND STILL)
 p_exhaust = pamb+1*bara; % pressure of exhaust in bar
 
 % air composition
