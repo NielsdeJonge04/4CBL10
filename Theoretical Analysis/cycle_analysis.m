@@ -34,7 +34,7 @@ Mi = [SpS.Mass];
 Cyl.Bore                = 104*mm;
 Cyl.Stroke              = 85*mm;
 Cyl.CompressionRatio    = 21.5;
-Cyl.ConRod              = 136.5*mm;
+Cyl.ConRod              = 136.5*mm; %original
 Cyl.TDCangle            = 0;
 % -- Valve closing events can sometimes be seen in fast oscillations in the pressure signal (due
 % to the impact when the Valve hits its seat).  (obsolute I think)
@@ -49,12 +49,12 @@ Vmax = CylinderVolume(180,Cyl);
 
 %% Base Variables
 % Base conditions (please update these with correct values later on)
-pamb = 1*bara; %ambient pressure of 1 bar 
+pamb = 1.31325*bara; %ambient pressure of 1 bar 
 Tamb = 21+kelvin; %ambient temperature converted to Kelvin
 Fuelcomposition = 'CH4';
 Q_LHV = 29.6*MJ; %NEEDS A UPDATE
-mfuelinj = 1.1*10^-5;                                                      %fuel injected per cycle in kg (NEEDS TO BE FOUND STILL)
-p_exhaust = pamb+1*bara; % pressure of exhaust in bar
+mfuelinj = 1.8*1.1*10^-5;                                                      %fuel injected per cycle in kg (NEEDS TO BE FOUND STILL)
+p_exhaust = pamb+0.2*bara; % pressure of exhaust in bar
 
 % air composition
 Xair = [0 0.21 0.79 0 0];                                                   % Molar fraction air composition
@@ -87,7 +87,7 @@ v_6 = Vmax;
 p_6 = pamb;
 
 % Intake stroke: -360° to -180°
-intake_indices = (Ca > -360) & (Ca <= -180);
+intake_indices = (Ca > -360) & (Ca <= 0);
 p_theory(intake_indices) = pamb;
 
 %% Compression Cycle
@@ -107,14 +107,14 @@ for i = 1:NSp
 end
 cp1 = Yair * Cpi1';
 cv1 = Yair * Cvi1';
-gamma1 = cp1/cv1;
+gamma1 = 1.1;
 
 % Compression stroke: -180° to 0° (or -180° to TDC)
 compression_indices = (Ca > -180) & (Ca <= 0);
 V_compression = V_theory(compression_indices); % Get volumes during compression
 
 % Calculate pressure for these specific volumes
-p_compression = @(Vcom) p1 * (V1 ./ Vcom).^gamma1;
+p_compression = @(Vcom) ((p1 * V1.^gamma1) ./ Vcom.^gamma1);
 p_theory(compression_indices) = p_compression(V_compression);
 
 % Calculate end pressure
@@ -153,7 +153,7 @@ for i = 1:NSp
 end
 cp2 = Yair * Cpi2';
 cv2 = Yair * Cvi2';
-gamma2 = cp2/cv2;
+gamma2 = gamma1;
 R3 = Runiv/Mpostcomb;
 
 % post combustion pressure
@@ -194,7 +194,7 @@ expansion_indices = (Ca > combustion_end_angle) & (Ca <= 180);
 V_expansion = V_theory(expansion_indices); % Get volumes during compression
 
 % Calculate pressure for these specific volumes
-p_expansion = @(Vexp) p3 * (V3 ./ Vexp).^gamma2;
+p_expansion = @(Vexp) ((p3 * V3^gamma2) ./ Vexp.^gamma2);
 p_theory(expansion_indices) = p_expansion(V_expansion);
 
 % Calculate end pressure
@@ -239,6 +239,7 @@ p_measured               = reshape(dataIn(:,2),[],Ncycles)*bara; % type 'help re
 f1=figure(1);
 % set(f1,'Position',[ 200 800 1200 400]);             % Just a size I like. Your choice
 pp = plot(Ca,p_measured/bara,'LineWidth',1);                 % Plots the whole matrix
+pt = plot(Ca,p_theory/bara,'LineWidth',1);
 xlabel('Ca');ylabel('p [bar]');                     % Always add axis labels
 xlim([-360 360]);ylim([0 50]);                      % Matter of taste
 iselect = 10;                                    % Plot cycle 10 again in the same plot to emphasize it. Just to show how to access individual cycles.
@@ -262,12 +263,17 @@ xlim([0 0.8]);ylim([0.5 50]);                      % Matter of taste
 set(gca,'XTick',0:0.1:0.8,'XGrid','on','YGrid','on');        % I like specific axis labels. Matter of taste
 title({'pV-diagram','(with wrong Volume function btw)'})
 subplot(2,1,2)
-loglog(V_measured/dm^3,p_measured(:,iselect)/bara);
-xlabel('V [dm^3]');ylabel('p [bar]');               % Always add axis labels
-xlim([0.02 0.8]);ylim([0 50]);                      % Matter of taste
+loglog(V_measured/dm^3, p_measured(:,iselect)/bara);
+hold on;
+loglog(V_theory/dm^3, p_theory/bara);
+hold off;
+xlabel('V [dm^3]'); ylabel('p [bar]');
+xlim([0.02 0.8]); 
+ylim([1 55]);  % Start at 1, not 0 or 0.5
 set(gca,'XTick',[0.02 0.05 0.1 0.2 0.5 0.8],...
-    'YTick',[0.5 1 2 5 10 20 50],'XGrid','on','YGrid','on');        % I like specific axis labels. Matter of taste
-title({'pV-diagram','(with wrong Volume function btw)'})
+    'YTick',[1 2 5 10 20 50],'XGrid','on','YGrid','on');
+title('pV-diagram (log-log)');
+legend('Measured', 'Theory');
 
 
 %% Plot p-V diagram with different colors for each stroke
