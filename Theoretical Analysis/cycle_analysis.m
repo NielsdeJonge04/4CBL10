@@ -140,20 +140,24 @@ v_6 = Vmax;                     % Volume at BDC [m³]
 p_6 = pamb;                     % Pressure equals ambient [Pa]
 
 % Set pressure for entire intake stroke (constant at ambient pressure)
-intake_indices = (Ca > -360) & (Ca <= 0);
+intake_indices = (Ca > -360) & (Ca < CaIVC);
 p_theory(intake_indices) = pamb;
 
 %% ========================================================================
 %  COMPRESSION STROKE ANALYSIS (-180° to 0° CA)
 %  ========================================================================
-%  Isentropic compression of air from BDC to TDC
+%  Isentropic compression of air from IVC to TDC
 %  ========================================================================
 
-% Initial state (State 1: BDC, intake valve closes)
-p1 = pamb;                      % Initial pressure [Pa]
-V1 = Vmax;                      % Initial volume [m³]
-T1 = Tamb;                      % Initial temperature [K]
-R1 = Runiv/MAir;                % Specific gas constant for air [J/(kg·K)]
+% Find index closest to IVC
+[~, idx_IVC] = min(abs(Ca - CaIVC));
+
+% State 1 (at IVC)
+V1 = V_theory(idx_IVC);   % Volume at IVC
+p1 = pamb;                % Pressure at IVC (common assumption)
+T1 = Tamb;                % Temperature at IVC (common assumption)
+R1 = Runiv/MAir;          % Specific gas constant
+
 
 % Calculate mass of air trapped in cylinder
 m_air = (p1*V1)/(R1*T1);        % [kg]
@@ -165,10 +169,10 @@ for i = 1:NSp
 end
 cp1 = Yair * Cpi1';             % Mass-weighted Cp for air [J/(kg·K)]
 cv1 = Yair * Cvi1';             % Mass-weighted Cv for air [J/(kg·K)]
-gamma1 = 1.1;                   % Specific heat ratio (approximate calculation doesnt hold due to heat losses)
+gamma1 = 1.175;                   % Specific heat ratio (approximate calculation doesnt hold due to heat losses)
 
 % Apply isentropic compression: p*V^gamma = constant
-compression_indices = (Ca > -180) & (Ca <= 0);
+compression_indices = (Ca >= CaIVC) & (Ca <= 0);
 V_compression = V_theory(compression_indices);
 
 % Calculate pressure during compression
@@ -392,9 +396,11 @@ f1 = figure(1);
 
 % Plot all measured cycles
 pp = plot(Ca_measured, p_measured/bara, 'LineWidth', 1);
+hold on
 
 % Plot theoretical cycle
 pt = plot(Ca, p_theory/bara, 'LineWidth', 1);
+hold off
 
 % Axis labels and limits
 xlabel('Crank Angle [°CA]'); 
@@ -440,7 +446,9 @@ title({'p-V Diagram', '(with wrong Volume function btw)'})
 % --- Subplot 2: Log-log scale ---
 subplot(2,1,2)
 loglog(V_measured/dm^3, p_measured(:,iselect)/bara);
+hold on
 loglog(V_theory/dm^3, p_theory/bara);
+hold off
 xlabel('Volume [dm³]'); 
 ylabel('Pressure [bar]');
 xlim([0.02 0.8]); 
