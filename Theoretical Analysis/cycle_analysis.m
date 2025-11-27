@@ -513,6 +513,8 @@ intake_indices = intake_indices(1:length(V_theory));
 plot(V_theory(intake_indices)/dm^3, p_theory(intake_indices)/bara, ...
     'b-', 'LineWidth', 2, 'DisplayName', 'Intake (Theory)');
 
+hold on
+
 % Compression stroke (Red)
 compression_indices = (Ca > -180) & (Ca <= 0);
 compression_indices = compression_indices(1:length(V_theory));
@@ -545,6 +547,8 @@ xlim([0 0.8]);
 ylim([0.5 50]);
 set(gca, 'XTick', 0:0.1:0.8, 'XGrid', 'on', 'YGrid', 'on');
 grid on;
+
+hold off
 
 %% ========================================================================
 %  END OF SCRIPT
