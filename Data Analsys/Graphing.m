@@ -6,10 +6,27 @@ clear; clc; close all;
 addpath("Functions","Nasa");
 
 %% ======================
+% Test data
+lambda = 6.386; % AFR
+CO_vol = 0.03; % vol percent
+CO2_vol = 2.15; % vol percent
+NOx_ppm = 428; % vol PPM
+LHV    = 42.7e6; % [J/kg]
+nonrenf = 1; % factor of non renewable carbon sources 0 for renewables 0.5 for 50/50 mix and 1 for non renewables
+AFR_stoich = 14.7;  % Stoichometric air fuel ratio
+fdaq_file = fullfile('Data','20251120_0000001_example_fdaq.txt');
+sdaq_file = fullfile('Data','20251120_0000001_example_sdaq.txt');
+
+%% ======================
 % UNITS
 mm   = 1e-3;
 dm   = 0.1;
 bara = 1e5;
+Runiv = 8.314;
+M_exhaust = 28.9647e-3; % [kg/mol]
+M_CO = 28.0101e-3;   % [kg/mol]
+M_CO2 = 44.009e-3;   % [kg/mol]
+M_NOx = 46.0055e-3;  % [kg/mol]
 
 %% ======================
 % ENGINE GEOMETRY
@@ -21,7 +38,7 @@ Cyl.TDCangle         = 0;          % TDC reference
 
 %% ======================
 % LOAD FAST DATA (fdaq)
-fdaq_file = fullfile('Data','20251120_0000001_example_fdaq.txt');
+
 fdaq = table2array(readtable(fdaq_file));
 
 Ca_raw   = fdaq(:,1);          % crank angle [deg]
@@ -41,7 +58,7 @@ iselect = 10;                  % cycle index to highlight
 
 %% ======================
 % LOAD SLOW DATA (sdaq)
-sdaq_file = fullfile('Data','20251120_0000001_example_sdaq.txt');
+
 sdaq = table2array(readtable(sdaq_file));
 
 mfuel = sdaq(:,1) * 1e-3;      % [kg/s]   (g/s -> kg/s)
@@ -51,6 +68,7 @@ Pint  = sdaq(:,4) * bara;      % [Pa]     (bar(a) -> Pa)
 
 % For this example file we assume a single steady point:
 mfuel_mean = mean(mfuel);      % average fuel mass flow [kg/s]
+texhaust_mean = mean(Texh) + 273.15;
 
 %% =============================================================
 % DRIFT CORRECTION (PEGGING at BDC) - Applied to all cycles
@@ -235,72 +253,26 @@ grid on;
 
 %% =============================================================
 % ======= PERFORMANCE KPIs =======
-
 n_test = 1500;        % [rpm] measurement speed
 
 % Indicated power: work per cycle * cycles per second
 cycles_per_sec = n_test / 120;        % 4-stroke: n/120
 P_i = W_ind * cycles_per_sec;         % [W]
 
-% Fuel energy input (using diesel LHV)
-LHV    = 42.7e6;                      % [J/kg]
+% Fuel energy input
 E_fuel = mfuel_mean * LHV;            % [W]
 
-% ---- Estimate brake power from assumed mechanical efficiency ----
-eta_mech_assumed = 0.85;              % typical value for small diesel
-P_b   = eta_mech_assumed * P_i;       % [W] estimated brake power
-P_b_kW = P_b / 1e3;                   % [kW]
-
 % Efficiencies & BSFC
-ITE      = P_i / E_fuel;              % indicated thermal efficiency
-BTE      = P_b / E_fuel;              % brake thermal efficiency
-eta_mech = P_b / P_i;                 % (= eta_mech_assumed, by construction)
-BSFC     = (mfuel_mean / P_b) * 3.6e9; % [g/kWh]
+eta    = P_i / E_fuel;              % indicated thermal efficiency
+BSFC = (mfuel_mean * 3600 * 1000) / (P_i / 1000); % [g/kWh]
 
 fprintf('\n========== PERFORMANCE KPIs ==========\n');
 fprintf('Indicated work  W_ind = %6.2f J/cycle\n', W_ind);
 fprintf('IMEP                = %6.2f bar\n', IMEP/bara);
 fprintf('Indicated power P_i = %6.2f kW\n', P_i/1e3);
-fprintf('Brake power P_b     = %6.2f kW (estimated, η_mech = %.2f)\n', P_b/1e3, eta_mech_assumed);
 fprintf('Fuel power E_fuel   = %6.2f kW\n', E_fuel/1e3);
-fprintf('ITE                 = %6.3f [-]\n', ITE);
-fprintf('BTE                 = %6.3f [-]\n', BTE);
-fprintf('Mechanical eff.     = %6.3f [-]\n', eta_mech);
+fprintf('eta                 = %6.3f [-]\n', eta);
 fprintf('BSFC                = %6.1f g/kWh\n', BSFC);
-
-%% =============================================================
-% KPI PLOTS (single operating point) (most of these plots are redundant)
-
-% 1) Efficiency bar plot
-figure;
-eff_names = categorical({'ITE','BTE','\eta_{mech}'});
-eff_names = reordercats(eff_names, {'ITE','BTE','\eta_{mech}'});
-eff_vals  = [ITE, BTE, eta_mech];
-
-bar(eff_names, eff_vals);
-ylim([0 1]);
-ylabel('Efficiency [-]');
-title('Engine Efficiencies at Operating Point');
-grid on;
-
-% 2) BSFC plot (single operating point)
-figure;
-bar(1, BSFC);
-set(gca,'XTick',1,'XTickLabel',{sprintf('P_b = %.1f kW', P_b/1000)});
-ylabel('BSFC [g/kWh]');
-title('Brake Specific Fuel Consumption');
-grid on;
-
-% 3) Combustion phasing bar plot
-figure;
-phase_names = categorical({'CA10','CA50','CA90'});
-phase_names = reordercats(phase_names, {'CA10','CA50','CA90'});
-phase_vals  = [CA10, CA50, CA90];
-
-bar(phase_names, phase_vals);
-ylabel('Crank angle [deg]');
-title('Combustion Phasing Angles');
-grid on;
 
 %% =============================================================
 %  SLOW SENSOR PLOTS 
@@ -329,63 +301,51 @@ title('Intake Pressure (slow sensor)');
 grid on;
 
 %% =============================================================
-% EMISSIONS KPIs 
-% Fill these from your lab emissions table (make sure lengths match load_perc)
+%% =============================================================
+% ======= EMISSIONS KPIs =======
 
-load_perc = [30, 50, 70];      % [%] engine/genset load
+% Air mass flow (from lambda & stoichiometric AFR)
+m_air = mfuel_mean * lambda * AFR_stoich;  % [kg/s]
 
-NOx_perc = [];   % [%] NOx  (fill with 3 values)
-CO_perc  = [];   % [%] CO   (fill with 3 values)
-CO2_perc = [];   % [vol.%] CO2 (3 values)
-THC_perc = [];   % [%] THC  (3 values)
+% Total exhaust mass flow
+m_exhaust = m_air + mfuel_mean;            % [kg/s]
 
-% -------- NOx vs load --------
-if numel(NOx_perc) == numel(load_perc)
-    figure;
-    plot(load_perc, NOx_perc, '-o', 'LineWidth', 1.8, 'MarkerSize', 8);
-    xlabel('Engine load [%]');
-    ylabel('NO_x [%]');
-    title('NO_x emissions vs load');
-    grid on;
-else
-    warning('Fill NOx_perc with data (same length as load_perc) to enable NOx plot.');
-end
+% Exhaust gas density at exhaust temperature
+rho_exhaust = (p_ref * M_exhaust) / (Runiv * texhaust_mean);  % [kg/m³]
 
-% -------- CO vs load --------
-if numel(CO_perc) == numel(load_perc)
-    figure;
-    plot(load_perc, CO_perc, '-s', 'LineWidth', 1.8, 'MarkerSize', 8);
-    xlabel('Engine load [%]');
-    ylabel('CO [%]');
-    title('CO emissions vs load');
-    grid on;
-else
-    warning('Fill CO_perc with data (same length as load_perc) to enable CO plot.');
-end
+% Volumetric exhaust flow
+V_exhaust = m_exhaust / rho_exhaust;       % [m³/s]
 
-% -------- CO2 vs load --------
-if numel(CO2_perc) == numel(load_perc)
-    figure;
-    plot(load_perc, CO2_perc, '-^', 'LineWidth', 1.8, 'MarkerSize', 8);
-    xlabel('Engine load [%]');
-    ylabel('CO_2 [vol.%]');
-    title('CO_2 emissions vs load');
-    grid on;
-else
-    warning('Fill CO2_perc with data (same length as load_perc) to enable CO2 plot.');
-end
+% Molar volume at STP [m³/mol]
+V_molar_STP = 22.414e-3;  % [m³/mol] or 22.414 [L/mol]
 
-% -------- THC vs load (optional) --------
-if numel(THC_perc) == numel(load_perc)
-    figure;
-    plot(load_perc, THC_perc, '-d', 'LineWidth', 1.8, 'MarkerSize', 8);
-    xlabel('Engine load [%]');
-    ylabel('THC [%]');
-    title('Unburned HC vs load');
-    grid on;
-else
-    warning('Fill THC_perc with data (same length as load_perc) to enable THC plot.');
-end
+% Temperature correction factor
+T_correction = 273.15 / texhaust_mean;
+
+% Emission mass flows
+mass_CO  = (CO_vol / 100) * V_exhaust * (M_CO / V_molar_STP) * T_correction;   % [kg/s]
+mass_CO2 = (CO2_vol / 100) * V_exhaust * (M_CO2 / V_molar_STP) * T_correction; % [kg/s]
+mass_NOx = (NOx_ppm / 1e6) * V_exhaust * (M_NOx / V_molar_STP) * T_correction; % [kg/s]
+
+% Brake-specific emissions
+BSCO        = mass_CO / P_i * 3.6e9;               % [g/kWh]
+BSCO2       = mass_CO2 / P_i * 3.6e9;              % [g/kWh]
+BSCO2nonren = (mass_CO2 * nonrenf) / P_i * 3.6e9;  % [g/kWh]
+BSNOx       = mass_NOx / P_i * 3.6e9;              % [g/kWh]
+
+fprintf('\n========== EMISSIONS KPIs ==========\n');
+fprintf('Air mass flow       = %6.4f kg/s\n', m_air);
+fprintf('Exhaust mass flow   = %6.4f kg/s\n', m_exhaust);
+fprintf('Lambda              = %6.3f [-]\n', lambda);
+fprintf('\nEmission mass flows:\n');
+fprintf('  CO                = %6.4f kg/s\n', mass_CO);
+fprintf('  CO2               = %6.4f kg/s\n', mass_CO2);
+fprintf('  NOx               = %6.4f kg/s\n', mass_NOx);
+fprintf('\nBrake-specific emissions:\n');
+fprintf('  BSCO              = %6.2f g/kWh\n', BSCO);
+fprintf('  BSCO2             = %6.1f g/kWh\n', BSCO2);
+fprintf('  BSCO2 (non-ren)   = %6.1f g/kWh\n', BSCO2nonren);
+fprintf('  BSNOx             = %6.2f g/kWh\n', BSNOx);
 
 %% =============================================================
 % CYLINDER VOLUME FUNCTION
