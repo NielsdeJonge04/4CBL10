@@ -5,6 +5,21 @@
 clear; clc; close all;
 addpath("Functions","Nasa");
 
+%% ===============================================================
+%  Starting Parameters
+% enter all parameters here that came from the matching test result
+%% ===============================================================
+
+fdaq_file = fullfile('Data','20251120_0000001_example_fdaq.txt'); % fast data file
+sdaq_file = fullfile('Data','20251120_0000001_example_sdaq.txt'); % slow data file
+n_test = 1500;      % [rpm] measurement speed
+LHV    = 42.7e6;    % [J/kg]
+lambda   = 1.6;     % [-] excess-air ratio at this load (EXAMPLE)
+CO2_vol  = 9.0;     % [vol-%] CO2 dry gas
+CO_vol   = 0.05;    % [vol-%] CO  dry gas
+NOx_ppm  = 400;     % [ppm] NOx
+nonrenfactor = 1;   % Factor from 0 to 1 of renewable carbon percentage 1 is totally non renewable 0 is totally renewable
+
 %% ======================
 % UNITS
 mm   = 1e-3;
@@ -21,7 +36,6 @@ Cyl.TDCangle         = 0;          % TDC reference
 
 %% ======================
 % LOAD FAST DATA (fdaq)
-fdaq_file = fullfile('Data','20251120_0000001_example_fdaq.txt');
 fdaq = table2array(readtable(fdaq_file));
 
 Ca_raw   = fdaq(:,1);          % crank angle [deg]
@@ -41,7 +55,6 @@ iselect = 10;                  % cycle index to highlight
 
 %% ======================
 % LOAD SLOW DATA (sdaq)
-sdaq_file = fullfile('Data','20251120_0000001_example_sdaq.txt');
 sdaq = table2array(readtable(sdaq_file));
 
 mfuel = sdaq(:,1) * 1e-3;      % [kg/s]   (g/s -> kg/s)
@@ -236,39 +249,24 @@ grid on;
 %% =============================================================
 % ======= PERFORMANCE KPIs (IMEP CALCULATED FROM DATA) =======
 
-n_test = 1500;                  % [rpm] measurement speed
+
 cycles_per_sec = n_test / 120;  % 4-stroke: n/120
 
 % Indicated power from THIS measured IMEP
 P_i = W_ind * cycles_per_sec;   % [W]
 
-% Fuel energy input (using diesel LHV)
-LHV    = 42.7e6;                % [J/kg]
+% Fuel energy input 
 E_fuel = mfuel_mean * LHV;      % [W]
-
-% Friction MEP (assumed) and mechanical efficiency from IMEP
-pf_bar = 0.5;                   % [bar] typical friction mean effective pressure
-pf     = pf_bar * bara;         % [Pa]
-
-eta_mech = 1 - pf/IMEP;         % derived from IMEP and FMEP
-
-% Brake power from indicated power and eta_mech
-P_b    = eta_mech * P_i;        % [W]
-P_b_kW = P_b / 1e3;             % [kW]
 
 % Efficiencies & BSFC at this operating point
 ITE  = P_i / E_fuel;                 % indicated thermal efficiency
-BTE  = P_b / E_fuel;                 % brake thermal efficiency
-BSFC = (mfuel_mean / P_b) * 3.6e9;   % [g/kWh]
+BSFC = (mfuel_mean / P_i) * 3.6e9;   % [g/kWh]
 
 fprintf('\n========== PERFORMANCE KPIs (from calculated IMEP) ==========\n');
 fprintf('IMEP (calculated)   = %6.2f bar\n', IMEP/bara);
 fprintf('Indicated power P_i = %6.2f kW\n', P_i/1e3);
-fprintf('Brake power P_b     = %6.2f kW\n', P_b/1e3);
 fprintf('Fuel power E_fuel   = %6.2f kW\n', E_fuel/1e3);
 fprintf('ITE                 = %6.3f [-]\n', ITE);
-fprintf('BTE                 = %6.3f [-]\n', BTE);
-fprintf('Mechanical eff.     = %6.3f [-]\n', eta_mech);
 fprintf('BSFC                = %6.1f g/kWh\n', BSFC);
 
 
@@ -301,14 +299,7 @@ grid on;
 
 %% =============================================================
 %  EMISSIONS KPIs  (single operating point / single load)
-%  -> Set the analyser readings below for each run (30%, 50%, 70% load)
 %% =============================================================
-
-% ====== 1. INPUTS FROM GAS ANALYSER (CHANGE PER LOAD) ======
-lambda   = 1.6;     % [-] excess-air ratio at this load (EXAMPLE)
-CO2_vol  = 9.0;     % [vol-%] CO2 dry gas
-CO_vol   = 0.05;    % [vol-%] CO  dry gas
-NOx_ppm  = 400;     % [ppm] NOx
 
 % ====== 2. CONSTANTS & BASIC ASSUMPTIONS ======
 AFR_stoich   = 14.5;       % [-] stoich AFR for diesel
@@ -338,9 +329,10 @@ mass_CO2 = (CO2_vol / 100) * V_exhaust * (M_CO2 / V_molar_STP) * T_correction;  
 mass_NOx = (NOx_ppm / 1e6) * V_exhaust * (M_NOx / V_molar_STP) * T_correction;   % [kg/s]
 
 % ====== 5. BRAKE-SPECIFIC EMISSIONS (per kWh) ======
-BSCO2 = (mass_CO2 / P_b) * 3.6e9;   % [g/kWh]
-BSCO  = (mass_CO  / P_b) * 3.6e9;   % [g/kWh]
-BSNOx = (mass_NOx / P_b) * 3.6e9;   % [g/kWh]
+BSCO2 = (mass_CO2 / P_i) * 3.6e9;   % [g/kWh]
+BSCO2nonren = (mass_CO2*nonrenfactor / P_b) * 3.6e9;   % [g/kWh]
+BSCO  = (mass_CO  / P_i) * 3.6e9;   % [g/kWh]
+BSNOx = (mass_NOx / P_i) * 3.6e9;   % [g/kWh]
 
 fprintf('\n========== EMISSIONS KPIs ==========\n');
 fprintf('Air mass flow       = %8.4f kg/s\n', m_air);
@@ -352,6 +344,7 @@ fprintf('  CO                = %8.5f kg/s\n', mass_CO);
 fprintf('  NOx               = %8.5f kg/s\n', mass_NOx);
 fprintf('\nBrake-specific emissions:\n');
 fprintf('  BSCO2             = %8.1f g/kWh\n', BSCO2);
+fprintf('  BSCO2nonren       = %8.1f g/kWh\n', BSCO2);
 fprintf('  BSCO              = %8.2f g/kWh\n', BSCO);
 fprintf('  BSNOx             = %8.2f g/kWh\n', BSNOx);
 
