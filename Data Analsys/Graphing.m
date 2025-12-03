@@ -396,7 +396,7 @@ BSCO  = (mass_CO  / P_i) * 3.6e9;   % [g/kWh]
 BSNOx = (mass_NOx / P_i) * 3.6e9;   % [g/kWh]
 BSGHG20 = (GHG20 / P_i) * 3.6e9;    % [g/kWh]
 BSGHG100 = (GHG100 / P_i) * 3.6e9;  % [g/kWh]
-BSSOOT = (mass_soot / P_i) * 3.6e9;  % [g/kWh]
+BSSOOT = (mass_soot / P_i) * 3.6e6; % [mg/kWh]
 
 
 fprintf('\n========== EMISSIONS KPIs ==========\n');
