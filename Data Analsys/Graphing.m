@@ -417,7 +417,7 @@ fprintf('  BSCO              = %8.2f g/kWh\n', BSCO);
 fprintf('  BSNOx             = %8.2f g/kWh\n', BSNOx);
 fprintf('  BSGHG20           = %8.2f g/kWh\n', BSGHG20);
 fprintf('  BSGHG100          = %8.2f g/kWh\n', BSGHG100);
-fprintf('  BSSOOT            = %8.2f g/kWh\n', BSSOOT);
+fprintf('  BSSOOT            = %8.2f mg/kWh\n', BSSOOT);
 
 %% =============================================================
 % CYLINDER VOLUME FUNCTION
