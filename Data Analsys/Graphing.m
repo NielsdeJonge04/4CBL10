@@ -10,15 +10,65 @@ addpath("Functions","Nasa");
 % enter all parameters here that came from the matching test result
 %% ===============================================================
 
+% Import emission data
 fdaq_file = fullfile('Data','20251120_0000001_example_fdaq.txt'); % fast data file
 sdaq_file = fullfile('Data','20251120_0000001_example_sdaq.txt'); % slow data file
-n_test = 1500;      % [rpm] measurement speed
-LHV    = 42.7e6;    % [J/kg]
-lambda   = 1.6;     % [-] excess-air ratio at this load (EXAMPLE)
-CO2_vol  = 9.0;     % [vol-%] CO2 dry gas
-CO_vol   = 0.05;    % [vol-%] CO  dry gas
-NOx_ppm  = 400;     % [ppm] NOx
-nonrenfactor = 1;   % Factor from 0 to 1 of renewable carbon percentage 1 is totally non renewable 0 is totally renewable
+csv_file = fullfile('Data', 'Diesel_emissions.csv');              % emissions file
+emission_data = readtable(csv_file);
+
+% User inputs for selection
+CA_value = 12;      % [deg] Combustion advance (12, 15, or 18)
+IMEP_value = 1.5;   % [bar] IMEP (1.5, 2.5, or 3.5)
+
+% Static parameters (not in CSV)
+AFR_stoich = 14.5;       % [-] stoich AFR for diesel
+LHV    = 42.7e6;         % [J/kg]
+nonrenfactor = 1;        % Factor from 0 to 1 of renewable carbon percentage
+n_test = 1500;           % [rpm] measurement speed
+
+% Construct the name to search for
+imep_str = strrep(num2str(IMEP_value), '.', '_');
+search_name = sprintf('CA%d_IMEP%s', CA_value, imep_str);
+
+% % Debug: display what we're searching for and what's available
+% fprintf('Searching for: %s\n', search_name);
+% fprintf('Available names in CSV:\n');
+% disp(emission_data.Name);
+
+% Find matching row
+row_idx = find(strcmp(emission_data.Name, search_name));
+
+if isempty(row_idx)
+    error('No matching data found for CA=%d and IMEP=%g', CA_value, IMEP_value);
+end
+
+% Extract data from the matched row
+lambda   = emission_data.lambda(row_idx);      % [-] excess-air ratio
+CO_vol   = emission_data.CO_volpct(row_idx);   % [vol-%] CO dry gas
+CO2_vol  = emission_data.CO2_volpct(row_idx);  % [vol-%] CO2 dry gas
+HC_ppm   = emission_data.HC_ppm(row_idx);      % [ppm] HC
+NOx_ppm  = emission_data.NOx_ppm(row_idx);     % [ppm] NOx
+O2_vol   = emission_data.O2_volpct(row_idx);   % [vol-%] O2 dry gas
+FSN      = emission_data.FSN(row_idx);         % [-] Filter Smoke Number
+
+% Convert HC from ppm to vol-%
+HC_vol = HC_ppm / 10000;  % [vol-%]
+
+% Display loaded values
+fprintf('Loaded data for %s:\n', search_name);
+fprintf('  Lambda:  %.2f\n', lambda);
+fprintf('  CO:      %.2f vol-%%\n', CO_vol);
+fprintf('  CO2:     %.2f vol-%%\n', CO2_vol);
+fprintf('  HC:      %.2f vol-%% (%d ppm)\n', HC_vol, HC_ppm);
+fprintf('  NOx:     %d ppm\n', NOx_ppm);
+fprintf('  O2:      %.2f vol-%%\n', O2_vol);
+fprintf('  FSN:     %.2f\n', FSN);
+
+% Manually entered data
+fprintf('Manually entered data for %s:\n', search_name);
+fprintf('  AFR_stoich:  %.2f\n', AFR_stoich);
+fprintf('  LHV:         %.2f vol-%%\n', LHV);
+fprintf('  nonrenfactor:%.2f vol-%%\n', nonrenfactor);
 
 %% ======================
 % UNITS
@@ -302,14 +352,15 @@ grid on;
 %% =============================================================
 
 % ====== 2. CONSTANTS & BASIC ASSUMPTIONS ======
-AFR_stoich   = 14.5;       % [-] stoich AFR for diesel
-M_exhaust    = 0.029;      % [kg/mol] approx. exhaust molar mass
-M_CO2        = 0.044;      % [kg/mol]
-M_CO         = 0.028;      % [kg/mol]
-M_NOx        = 0.046;      % [kg/mol] NO2-equivalent
+M_exhaust    = 29e-3;      % [kg/mol] approx. exhaust molar mass
+M_CO2        = 44.01e-3;   % [kg/mol]
+M_CO         = 28.01e-3;   % [kg/mol]
+M_HC         = 44.1e-3;    % [kg/mol] Propane equivalent
+M_NOx        = 46.0e-3;    % [kg/mol] NO2-equivalent
 V_molar_STP  = 22.414e-3;  % [m^3/mol] molar volume at STP
 Texh_mean_K  = Texh_mean_C + 273.15;  % [K]
-
+GWP20_CH4    = 79;         % GWP values
+GWP100_CH4   = 27.2;       % GWP values
 
 % Temperature correction factor (STP -> exhaust conditions)
 T_correction = 273.15 / Texh_mean_K;
@@ -326,13 +377,21 @@ V_exhaust   = m_exhaust / rho_exhaust;                   % [m^3/s]
 % ====== 4. EMISSION MASS FLOWS (from analyser readings) ======
 mass_CO  = (CO_vol  / 100) * V_exhaust * (M_CO  / V_molar_STP) * T_correction;   % [kg/s]
 mass_CO2 = (CO2_vol / 100) * V_exhaust * (M_CO2 / V_molar_STP) * T_correction;   % [kg/s]
+mass_HC  = (HC_vol / 100) * V_exhaust * (M_HC / V_molar_STP) * T_correction;     % [kg/s]
 mass_NOx = (NOx_ppm / 1e6) * V_exhaust * (M_NOx / V_molar_STP) * T_correction;   % [kg/s]
+
+% ====== 5. GHG-20 & DHD 100 calculations ======
+CO2eq_from_CO = mass_CO * (M_CO2 / M_CO);
+GHG20 = mass_CO2 + CO2eq_from_CO + mass_HC * GWP20_CH4;
+GHG100 = mass_CO2 + CO2eq_from_CO + mass_HC * GWP100_CH4;
 
 % ====== 5. BRAKE-SPECIFIC EMISSIONS (per kWh) ======
 BSCO2 = (mass_CO2 / P_i) * 3.6e9;   % [g/kWh]
-BSCO2nonren = (mass_CO2*nonrenfactor / P_b) * 3.6e9;   % [g/kWh]
+BSCO2nonren = (mass_CO2*nonrenfactor / P_i) * 3.6e9;   % [g/kWh]
 BSCO  = (mass_CO  / P_i) * 3.6e9;   % [g/kWh]
 BSNOx = (mass_NOx / P_i) * 3.6e9;   % [g/kWh]
+BSGHG20 = (GHG20 / P_i) * 3.6e9;    % [g/kWh]
+BSGHG100 = (GHG100 / P_i) * 3.6e9;  % [g/kWh]
 
 fprintf('\n========== EMISSIONS KPIs ==========\n');
 fprintf('Air mass flow       = %8.4f kg/s\n', m_air);
@@ -341,12 +400,17 @@ fprintf('Lambda              = %8.3f [-]\n', lambda);
 fprintf('\nEmission mass flows:\n');
 fprintf('  CO2               = %8.5f kg/s\n', mass_CO2);
 fprintf('  CO                = %8.5f kg/s\n', mass_CO);
+fprintf('  HC                = %8.5f kg/s\n', mass_HC);
 fprintf('  NOx               = %8.5f kg/s\n', mass_NOx);
+fprintf('  GHG20             = %8.5f kg/s\n', GHG20);
+fprintf('  GHG100            = %8.5f kg/s\n', GHG100);
 fprintf('\nBrake-specific emissions:\n');
 fprintf('  BSCO2             = %8.1f g/kWh\n', BSCO2);
 fprintf('  BSCO2nonren       = %8.1f g/kWh\n', BSCO2);
 fprintf('  BSCO              = %8.2f g/kWh\n', BSCO);
 fprintf('  BSNOx             = %8.2f g/kWh\n', BSNOx);
+fprintf('  BSGHG20           = %8.2f g/kWh\n', BSGHG20);
+fprintf('  BSGHG100          = %8.2f g/kWh\n', BSGHG100);
 
 %% =============================================================
 % CYLINDER VOLUME FUNCTION
