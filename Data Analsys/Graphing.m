@@ -373,12 +373,16 @@ m_exhaust = m_air + mfuel_mean;                 % [kg/s]
 R_univ      = 8.314;                                     % [J/mol/K]
 rho_exhaust = p_ref * M_exhaust / (R_univ * Texh_mean_K);% [kg/m^3]
 V_exhaust   = m_exhaust / rho_exhaust;                   % [m^3/s]
+C_soot_mg_m3 = (4.95/0.405) * FSN * exp(0.38 * FSN);
+
 
 % ====== 4. EMISSION MASS FLOWS (from analyser readings) ======
 mass_CO  = (CO_vol  / 100) * V_exhaust * (M_CO  / V_molar_STP) * T_correction;   % [kg/s]
 mass_CO2 = (CO2_vol / 100) * V_exhaust * (M_CO2 / V_molar_STP) * T_correction;   % [kg/s]
 mass_HC  = (HC_vol / 100) * V_exhaust * (M_HC / V_molar_STP) * T_correction;     % [kg/s]
 mass_NOx = (NOx_ppm / 1e6) * V_exhaust * (M_NOx / V_molar_STP) * T_correction;   % [kg/s]
+mass_soot = C_soot_mg_m3 * V_exhaust;
+
 
 % ====== 5. GHG-20 & DHD 100 calculations ======
 CO2eq_from_CO = mass_CO * (M_CO2 / M_CO);
@@ -392,6 +396,8 @@ BSCO  = (mass_CO  / P_i) * 3.6e9;   % [g/kWh]
 BSNOx = (mass_NOx / P_i) * 3.6e9;   % [g/kWh]
 BSGHG20 = (GHG20 / P_i) * 3.6e9;    % [g/kWh]
 BSGHG100 = (GHG100 / P_i) * 3.6e9;  % [g/kWh]
+BSSOOT = (mass_soot / P_i) * 3.6e9;  % [g/kWh]
+
 
 fprintf('\n========== EMISSIONS KPIs ==========\n');
 fprintf('Air mass flow       = %8.4f kg/s\n', m_air);
@@ -411,6 +417,7 @@ fprintf('  BSCO              = %8.2f g/kWh\n', BSCO);
 fprintf('  BSNOx             = %8.2f g/kWh\n', BSNOx);
 fprintf('  BSGHG20           = %8.2f g/kWh\n', BSGHG20);
 fprintf('  BSGHG100          = %8.2f g/kWh\n', BSGHG100);
+fprintf('  BSSOOT            = %8.2f g/kWh\n', BSSOOT);
 
 %% =============================================================
 % CYLINDER VOLUME FUNCTION
