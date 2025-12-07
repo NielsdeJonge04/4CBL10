@@ -382,6 +382,7 @@ mass_CO2 = (CO2_vol / 100) * V_exhaust * (M_CO2 / V_molar_STP) * T_correction;  
 mass_HC  = (HC_vol / 100) * V_exhaust * (M_HC / V_molar_STP) * T_correction;     % [kg/s]
 mass_NOx = (NOx_ppm / 1e6) * V_exhaust * (M_NOx / V_molar_STP) * T_correction;   % [kg/s]
 mass_soot = C_soot_mg_m3 * V_exhaust;
+norm_nox = mass_NOx * ((21-15)/21 - O2_vol);
 
 
 % ====== 5. GHG-20 & DHD 100 calculations ======
@@ -403,6 +404,7 @@ fprintf('\n========== EMISSIONS KPIs ==========\n');
 fprintf('Air mass flow       = %8.4f kg/s\n', m_air);
 fprintf('Exhaust mass flow   = %8.4f kg/s\n', m_exhaust);
 fprintf('Lambda              = %8.3f [-]\n', lambda);
+fprintf('N NOx               = %8.3f kg/s\n', norm_nox);
 fprintf('\nEmission mass flows:\n');
 fprintf('  CO2               = %8.5f kg/s\n', mass_CO2);
 fprintf('  CO                = %8.5f kg/s\n', mass_CO);
