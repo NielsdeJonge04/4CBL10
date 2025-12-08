@@ -278,7 +278,7 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         mdot_CO2  = x_CO2 * V_exhaust * (M_CO2 / V_molar_STP) * T_correction;    % [kg/s]
         mdot_HC   = x_HC  * V_exhaust * (M_HC / V_molar_STP) * T_correction;     % [kg/s]
         mdot_NOx  = x_NOx * V_exhaust * (M_NOx / V_molar_STP) * T_correction;    % [kg/s]
-        mdot_NNox = mdot_NOx * ((21-15)/21 - O2_volpct);
+        mdot_NNox = mdot_NOx * ((21-15)/(21 - O2_volpct));
 
         % Emission indices [g/MJ fuel]
         EI_CO(k)  = (mdot_CO  * 1000) / Edot_MJ_s;
