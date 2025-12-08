@@ -138,7 +138,7 @@ p_smooth = sgolayfilt(p_avg, 3, 81);   % (order 3, window 81 samples)
 % Extract selected cycle (for plotting / volume):
 Ca_sel  = Ca(:, iselect);
 p_sel   = p(:, iselect);               % raw, uncorrected
-p_corr  = p_corr_all(:, iselect);      % corrected (single cycle) [not directly used]
+p_corr  = p_corr_all(:, iselect);      % corrected (single cycle)
 
 %% ======================
 % PLOT: p–CA (raw)
