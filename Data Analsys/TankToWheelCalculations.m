@@ -3,17 +3,17 @@ clear; clc;
 % ============================================================
 % Directories
 % ============================================================
-dieselDir     = 'Diesel';
-hvoDir        = 'HVO';
-gtlDir        = 'GTL';
-hvo_dieselDir = 'HVO_Diesel';
-gtl_dieselDir = 'GTL_Diesel';   %#ok<NASGU>  % not used yet
+dieselDir     = 'Data/Diesel';
+hvoDir        = 'Data/HVO';
+gtlDir        = 'Data/GTL';
+hvo_dieselDir = 'Data/HVO_Diesel';
+gtl_dieselDir = 'Data/GTL_Diesel';   
 
-dieselEmisFile     = 'Diesel_emissions.csv';
-hvoEmisFile        = 'HVO_emissions.csv';
-GTLEmisFile        = 'GTL_emissions.csv';
-hvo_dieselEmisFile = 'HVO&diesel_emissions.csv';
-%GTL_dieselEmisFile = 'GTL&diesel_emissions.csv';
+dieselEmisFile     = 'Data/Emissions_csv/Diesel_emissions.csv';
+hvoEmisFile        = 'Data/Emissions_csv/HVO_emissions.csv';
+GTLEmisFile        = 'Data/Emissions_csv/GTL_emissions.csv';
+hvo_dieselEmisFile = 'Data/Emissions_csv/HVO&diesel_emissions.csv';
+GTL_dieselEmisFile = 'Data/Emissions_csv/GTL&diesel_emissions.csv';
 
 % ============================================================
 % Fuel properties  (LHV in MJ/kg, AFRst in kg air / kg fuel)
@@ -31,63 +31,68 @@ LHV_HVO_diesel   = 43.55;   % MJ/kg
 AFRst_HVO_diesel = 14.74;
 
 LHV_GTL_diesel   = 43.50;   % MJ/kg
-AFRst_GTL_diesel = 14.74;   %#ok<NASGU>
+AFRst_GTL_diesel = 14.74;   
 
 % Non-renewable carbon factors (0 = fully renewable, 1 = fossil)
 nonren_diesel      = 1.0;
 nonren_hvo         = 0.0;   % pure renewable (adjust if needed)
 nonren_GTL         = 1.0;
 nonren_HVO_diesel  = 0.5;   % 50/50 blend example (adjust if needed)
-%nonren_GTL_diesel = 1.0;
+nonren_GTL_diesel = 1.0;
 
 % ============================================================
 % Engine & operating conditions for brake-specific metrics
 % ============================================================
 mm   = 1e-3;
-B    = 104*mm;     % bore [m]
-S    = 85*mm;      % stroke [m]
-Vd   = pi*(B^2)/4 * S;   % displaced volume per cycle [m^3] (single cyl)
+Cyl.Bore             = 104*mm;
+Cyl.Stroke           = 85*mm;
+Cyl.CompressionRatio = 21.5;
+Cyl.ConRod           = 136.5*mm;
+Cyl.TDCangle         = 0;          % TDC reference
+v_min = CylinderVolume(0, Cyl);
+v_max = CylinderVolume(180, Cyl);
+Vd = v_max - v_min;
 n_engine = 1500;   % [rpm] engine speed (constant in tests)
 
 % ============================================================
 % Gas properties & constants
 % ============================================================
-M_mix = 29e-3;      % kg/mol (average exhaust gas)
+M_mix = 29e-3;  % kg/mol (average exhaust gas)
+M_exhaust = 29e-3;  % kg/mol (average exhaust gas)
 M_CO  = 28.01e-3;   % kg/mol
 M_CO2 = 44.01e-3;   % kg/mol
 M_HC  = 44.1e-3;    % kg/mol (propane-equivalent)
 M_NOx = 46.0e-3;    % kg/mol
 
 R_u   = 8.314;      % J/(mol K)
-p_exh = 1e5;        % Pa (assumed atmospheric)
 
 % ============================================================
 % Compute results (g/MJ + brake-specific emissions)
 % ============================================================
 resultsDiesel = compute_g_per_MJ_with_soot_and_BS( ...
     dieselDir, dieselEmisFile, LHV_diesel, AFRst_diesel, ...
-    M_mix, M_CO, M_CO2, M_NOx, M_HC, R_u, p_exh, ...
+    M_mix, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
     Vd, n_engine, nonren_diesel);
 
 resultsHVO = compute_g_per_MJ_with_soot_and_BS( ...
     hvoDir, hvoEmisFile, LHV_hvo, AFRst_hvo, ...
-    M_mix, M_CO, M_CO2, M_NOx, M_HC, R_u, p_exh, ...
+    M_mix, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
     Vd, n_engine, nonren_hvo);
 
 resultsGTL = compute_g_per_MJ_with_soot_and_BS( ...
     gtlDir, GTLEmisFile, LHV_GTL, AFRst_GTL, ...
-    M_mix, M_CO, M_CO2, M_NOx, M_HC, R_u, p_exh, ...
+    M_mix, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
     Vd, n_engine, nonren_GTL);
 
 resultsHVODiesel = compute_g_per_MJ_with_soot_and_BS( ...
     hvo_dieselDir, hvo_dieselEmisFile, LHV_HVO_diesel, AFRst_HVO_diesel, ...
-    M_mix, M_CO, M_CO2, M_NOx, M_HC, R_u, p_exh, ...
+    M_mix, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
     Vd, n_engine, nonren_HVO_diesel);
 
-% resultsGTLDiesel = compute_g_per_MJ_with_soot_and_BS( ...
-%     gtl_dieselDir, gtl_dieselEmisFile, LHV_GTL_diesel, AFRst_GTL_diesel, ...
-%     M_mix, M_CO, M_CO2, M_NOx, M_HC, R_u, p_exh, ...
-%     Vd, n_engine, nonren_GTL_diesel);
+resultsGTLDiesel = compute_g_per_MJ_with_soot_and_BS( ...
+    gtl_dieselDir, GTL_dieselEmisFile, LHV_GTL_diesel, AFRst_GTL_diesel, ...
+    M_mix, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
+    Vd, n_engine, nonren_GTL_diesel);
 
 % ============================================================
 % Display in command window
@@ -114,7 +119,7 @@ writetable(resultsDiesel,    'Diesel_g_per_MJ.csv');
 writetable(resultsHVO,       'HVO_g_per_MJ.csv');
 writetable(resultsGTL,       'GTL_g_per_MJ.csv');
 writetable(resultsHVODiesel, 'HVO_Diesel_g_per_MJ.csv');
-%writetable(resultsGTLDiesel, 'GTL_Diesel_g_per_MJ.csv');
+writetable(resultsGTLDiesel, 'GTL_Diesel_g_per_MJ.csv');
 
 
 
@@ -132,7 +137,7 @@ writetable(resultsHVODiesel, 'HVO_Diesel_g_per_MJ.csv');
 
 function results = compute_g_per_MJ_with_soot_and_BS( ...
     sdaqDir, emisFile, LHV_MJkg, AFRst, ...
-    M_mix, M_CO, M_CO2, M_NOx, M_HC, R_u, p_exh, ...
+    M_mix, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
     Vd, n_engine, nonren_factor)
 
     % Read emissions table (one row per operating point)
@@ -140,10 +145,12 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
 
     % Slow data files (for mfuel, Tint, Texh, Pint)
     sdaqFiles = dir(fullfile(sdaqDir, '*sdaq*.txt'));
+    fdaqFiles = dir(fullfile(sdaqDir,'*fdaq*.txt')); % fast data file
     nOP = height(emis);
 
     % Preallocate
     opName   = strings(nOP,1);
+    BMEP_BA = zeros(nOP,1);
     mfuel_gs = zeros(nOP,1);
     lambda   = zeros(nOP,1);
 
@@ -166,6 +173,7 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
     BS_GHG100_g_per_kWh    = zeros(nOP,1);
     BS_soot_mg_per_kWh     = zeros(nOP,1);
     BSFC_g_per_kWh         = zeros(nOP,1);
+    BS_NNOx_g_per_kWh      = zeros(nOP,1);
 
     % GWP values (same as in single-point KPI script)
     GWP20_CH4  = 79;
@@ -173,15 +181,53 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
 
     bara = 1e5; % [Pa/bar]
 
+    V_molar_STP  = 22.414e-3;  % [m^3/mol] molar volume at STP
+
+
     for k = 1:nOP
 
         % --------------------------------------------------------
         % Load slow data for this operating point
         % --------------------------------------------------------
-        data = readmatrix(fullfile(sdaqDir, sdaqFiles(k).name));
+        sdata = readmatrix(fullfile(sdaqDir, sdaqFiles(k).name));
+        
+        mfuel_gs(k) = mean(sdata(:,1));          % g/s
+        Texh_mean_K      = mean(sdata(:,3)) + 273.15; % exhaust T [K]
+        Pint  = sdata(:,4) * bara;      % [Pa]     (bar(a) -> Pa)
+        % --------------------------------------------------------
+        % Load fast data for this operating point
+        % --------------------------------------------------------
 
-        mfuel_gs(k) = mean(data(:,1));          % g/s
-        Texh_K      = mean(data(:,3)) + 273.15; % exhaust T [K]
+        Fdata = readmatrix(fullfile(sdaqDir, fdaqFiles(k).name));
+
+        Ca_raw   = Fdata(:,1);          % crank angle [deg]
+        p_raw    = Fdata(:,2) * bara;   % in-cylinder pressure [Pa] (NOT pegged)
+        
+        % Reshape into cycles
+        dCa = 0.2;                     % deg/step
+        pts_per_cycle = 720/dCa;       % 4-stroke -> 720 deg/cycle
+        Ncycles = floor(length(Ca_raw)/pts_per_cycle);
+        
+        Ca   = reshape(Ca_raw ,[],Ncycles);
+        p    = reshape(p_raw  ,[],Ncycles);
+
+        % DRIFT CORRECTION (PEGGING at BDC) - Applied to all cycles
+        [~, idxBDC] = min(abs(Ca(:,1) + 180));  % BDC ~ -180 deg CA
+        
+        p_ref = mean(Pint);                     % intake pressure reference [Pa]
+        
+        p_corr_all = zeros(size(p));
+        for i = 1:Ncycles
+            p_meas = p(idxBDC, i);             % measured p at BDC (cycle i)
+            p_corr_all(:, i) = p(:, i) + (p_ref - p_meas);
+        end
+        
+        % PRESSURE SMOOTHING (noise reduction)
+        % First average all pegged cycles:
+        p_avg = mean(p_corr_all, 2);           % [Pa]
+        
+        % Then apply Savitzky-Golay filter:
+        p_smooth = sgolayfilt(p_avg, 3, 81);   % (order 3, window 81 samples)
 
         % --------------------------------------------------------
         % Emission inputs from CSV
@@ -193,7 +239,8 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         CO2_volpct = emis.CO2_volpct(k);
         HC_ppm     = emis.HC_ppm(k);
         NOx_ppm    = emis.NOx_ppm(k);
-        FSN        = emis.FSN(k);    
+        FSN        = emis.FSN(k);
+        O2_volpct  = emis.O2_volpct(k);
 
         % --------------------------------------------------------
         % Mass & energy flows
@@ -212,17 +259,26 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         % --------------------------------------------------------
         x_CO  = CO_volpct  / 100;   % vol fraction
         x_CO2 = CO2_volpct / 100;
-        x_HC  = HC_ppm  / 1e6;
+        x_HC  = HC_ppm  / 1e5; % ppm*10
         x_NOx = NOx_ppm / 1e6;
+        
+        % --------------------------------------------------------
+        % temperature corrected exhaust density and volume
+        % --------------------------------------------------------
+        T_correction = 273.15 / Texh_mean_K;
+
+        % Exhaust density and volumetric flow
+        rho_exhaust = p_ref * M_exhaust / (R_u * Texh_mean_K);% [kg/m^3]
+        V_exhaust   = mexh_kg_s / rho_exhaust;                   % [m^3/s]
 
         % --------------------------------------------------------
         % Gas species mass flows [kg/s]
         % --------------------------------------------------------
-        mdot_CO   = mexh_kg_s * x_CO  * (M_CO  / M_mix);
-        mdot_CO2  = mexh_kg_s * x_CO2 * (M_CO2 / M_mix);
-        mdot_HC   = mexh_kg_s * x_HC  * (M_HC  / M_mix);
-        mdot_NOx  = mexh_kg_s * x_NOx * (M_NOx / M_mix);
-        mdot_NNox = mdot_NOx * ((21-15)/21 - O2_vol);
+        mdot_CO   = x_CO  * V_exhaust * (M_CO / V_molar_STP) * T_correction;     % [kg/s]
+        mdot_CO2  = x_CO2 * V_exhaust * (M_CO2 / V_molar_STP) * T_correction;    % [kg/s]
+        mdot_HC   = x_HC  * V_exhaust * (M_HC / V_molar_STP) * T_correction;     % [kg/s]
+        mdot_NOx  = x_NOx * V_exhaust * (M_NOx / V_molar_STP) * T_correction;    % [kg/s]
+        mdot_NNox = mdot_NOx * ((21-15)/21 - O2_volpct);
 
         % Emission indices [g/MJ fuel]
         EI_CO(k)  = (mdot_CO  * 1000) / Edot_MJ_s;
@@ -236,10 +292,7 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         C_soot_mg_m3 = (4.95/0.405) * FSN * exp(0.38 * FSN);  % [mg/m^3]
 
         % Exhaust density & volume flow
-        rho_exh   = p_exh * M_mix / (R_u * Texh_K);   % [kg/m^3]
-        Vdot_exh  = mexh_kg_s / rho_exh;              % [m^3/s]
-
-        mdot_soot_mg_s = C_soot_mg_m3 * Vdot_exh;     % [mg/s]
+        mdot_soot_mg_s = C_soot_mg_m3 * V_exhaust;
         EI_soot(k)     = (mdot_soot_mg_s / 1000) / Edot_MJ_s;  % [g/MJ]
 
         % --------------------------------------------------------
@@ -251,17 +304,14 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
 
         % --------------------------------------------------------
         % Brake power from nominal IMEP in operating point name
-        % (assume "CA12_IMEP1_5" etc → BMEP = 1.5 bar)
         % --------------------------------------------------------
-        nameStr = emis.Name{k};  % e.g. 'CA12_IMEP1_5'
-        % Extract substring after 'IMEP'
-        idxIMEP = strfind(nameStr, 'IMEP');
-        if isempty(idxIMEP)
-            error('Operating point name "%s" does not contain "IMEP".', nameStr);
-        end
-        imep_sub = nameStr(idxIMEP+4:end);        % e.g. '1_5'
-        imep_bar = str2double(strrep(imep_sub, '_', '.'));  % [bar]
-        BMEP_Pa  = imep_bar * bara;              % [Pa]
+        % IMEP (using smoothed average pressure)
+        Ca_rad = deg2rad(Ca(:,1));  % Convert crank angle to radians
+        V = CylinderVolume(Ca(:,1), Cyl);  % Calculate volume at each crank angle
+        W_ind = trapz(V, p_smooth);  % [J/cycle] - integrate p dV
+        
+        BMEP_Pa  = W_ind / Vd;     % [Pa]
+        BMEP_BA(k) = BMEP_Pa / bara;% [Bar]
 
         % 4-stroke single-cylinder: P_b = BMEP * Vd * n/120
         P_b_W = BMEP_Pa * Vd * (n_engine / 120); % [W]
@@ -284,7 +334,7 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         % Conversion factors:
         %   - species kg/s → g/kWh: * (3.6e9 / P_b_W)
         %   - soot mg/s   → mg/kWh: * (3.6e6 / P_b_W)
-        fact_g = 3.6e9 / P_b_W;
+        fact_g  = 3.6e9 / P_b_W;
         fact_mg = 3.6e6 / P_b_W;
 
         BS_CO2_g_per_kWh(k)       = mass_CO2       * fact_g;
@@ -294,6 +344,7 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         BS_GHG20_g_per_kWh(k)     = GHG20_mass     * fact_g;
         BS_GHG100_g_per_kWh(k)    = GHG100_mass    * fact_g;
         BS_soot_mg_per_kWh(k)     = mass_soot      * fact_mg;
+        BS_NNOx_g_per_kWh(k)      = mdot_NNox      * fact_g;
 
         % Brake-specific fuel consumption [g/kWh]
         BSFC_g_per_kWh(k) = (mfuel_kg_s * fact_g);  % mfuel_kg_s * (3.6e9/P_b_W)
@@ -304,29 +355,49 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
     % Build output table
     % ------------------------------------------------------------
     results = table(...
-        opName, mfuel_gs, lambda, ...
-        EI_CO, EI_CO2, EI_HC, EI_NOx, EI_soot, ...
-        GHG20, GHG100, ...
-        P_b_kW, ...
-        BSFC_g_per_kWh, ...
-        BS_CO2_g_per_kWh, BS_CO2nonren_g_per_kWh, ...
-        BS_CO_g_per_kWh, BS_NOx_g_per_kWh, ...
-        BS_GHG20_g_per_kWh, BS_GHG100_g_per_kWh, ...
-        BS_soot_mg_per_kWh, mdot_NNox, ...
-        'VariableNames', { ...
-            'OperatingPoint','mFuel_g_per_s','lambda', ...
-            'EI_CO_g_per_MJ','EI_CO2_g_per_MJ', ...
-            'EI_HC_g_per_MJ','EI_NOx_g_per_MJ', ...
-            'EI_soot_g_per_MJ', ...
-            'GHG20_gCO2eq_per_MJ','GHG100_gCO2eq_per_MJ', ...
-            'P_b_kW', ...
-            'BSFC_g_per_kWh', ...
-            'BS_CO2_g_per_kWh','BS_CO2nonren_g_per_kWh', ...
-            'BS_CO_g_per_kWh','BS_NOx_g_per_kWh', ...
-            'BS_GHG20_gCO2eq_per_kWh','BS_GHG100_gCO2eq_per_kWh', ...
-            'BS_soot_mg_per_kWh', 'mdot_NNox' ...
-        } ...
-    );
+            opName, BMEP_BA ,mfuel_gs, lambda, ...
+            EI_CO, EI_CO2, EI_HC, EI_NOx, EI_soot, ...
+            GHG20, GHG100, ...
+            P_b_kW, ...
+            BSFC_g_per_kWh, ...
+            BS_CO2_g_per_kWh, BS_CO2nonren_g_per_kWh, ...
+            BS_CO_g_per_kWh, BS_NOx_g_per_kWh, ...
+            BS_GHG20_g_per_kWh, BS_GHG100_g_per_kWh, ...
+            BS_soot_mg_per_kWh, BS_NNOx_g_per_kWh, ...
+    'VariableNames', { ...
+    'OperatingPoint','BMEP_BA' ,'mFuel_g_per_s','lambda', ...
+    'EI_CO_g_per_MJ','EI_CO2_g_per_MJ', ...
+    'EI_HC_g_per_MJ','EI_NOx_g_per_MJ', ...
+    'EI_soot_g_per_MJ', ...
+    'GHG20_gCO2eq_per_MJ','GHG100_gCO2eq_per_MJ', ...
+    'P_b_kW', ...
+    'BSFC_g_per_kWh', ...
+    'BS_CO2_g_per_kWh','BS_CO2nonren_g_per_kWh', ...
+    'BS_CO_g_per_kWh','BS_NOx_g_per_kWh', ...
+    'BS_GHG20_gCO2eq_per_kWh','BS_GHG100_gCO2eq_per_kWh', ...
+    'BS_soot_mg_per_kWh', 'BS_NNOx_g_per_kWh' ...
+            });
 
 end
 
+%% =============================================================
+% CYLINDER VOLUME FUNCTION
+function V = CylinderVolume(Ca, Cyl)
+    B  = Cyl.Bore;
+    S  = Cyl.Stroke;
+    CR = Cyl.CompressionRatio;
+    L  = Cyl.ConRod;
+
+    Ap = pi*(B^2)/4;
+    Vd = Ap*S;
+    Vc = Vd/(CR-1);
+
+    theta = deg2rad(Ca - Cyl.TDCangle);
+    r = S/2;
+
+    under = L^2 - (r*sin(theta)).^2;
+    under(under<0) = 0;
+
+    x = r*(1 - cos(theta)) + (L - sqrt(under));
+    V = Vc + Ap*x;
+end
