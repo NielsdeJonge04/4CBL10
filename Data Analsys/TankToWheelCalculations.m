@@ -1,4 +1,9 @@
 clear; clc;
+% ============================================================
+% Settings
+% ============================================================
+
+use_lambda = false; %if true uses AFR and lambda to guess mass flow else pumped volume
 
 % ============================================================
 % Directories
@@ -52,6 +57,7 @@ Cyl.TDCangle         = 0;          % TDC reference
 v_min = CylinderVolume(0, Cyl);
 v_max = CylinderVolume(180, Cyl);
 Vd = v_max - v_min;
+eta_v = 0.85;
 n_engine = 1500;   % [rpm] engine speed (constant in tests)
 
 % ============================================================
@@ -71,28 +77,28 @@ R_u   = 8.314;      % J/(mol K)
 % ============================================================
 resultsDiesel = compute_g_per_MJ_with_soot_and_BS( ...
     dieselDir, dieselEmisFile, LHV_diesel, AFRst_diesel, ...
-    M_mix, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
-    Vd, n_engine, nonren_diesel);
+    eta_v, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
+    Vd, n_engine, nonren_diesel, use_lambda);
 
 resultsHVO = compute_g_per_MJ_with_soot_and_BS( ...
     hvoDir, hvoEmisFile, LHV_hvo, AFRst_hvo, ...
-    M_mix, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
-    Vd, n_engine, nonren_hvo);
+    eta_v, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
+    Vd, n_engine, nonren_hvo, use_lambda);
 
 resultsGTL = compute_g_per_MJ_with_soot_and_BS( ...
     gtlDir, GTLEmisFile, LHV_GTL, AFRst_GTL, ...
-    M_mix, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
-    Vd, n_engine, nonren_GTL);
+    eta_v, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
+    Vd, n_engine, nonren_GTL, use_lambda);
 
 resultsHVODiesel = compute_g_per_MJ_with_soot_and_BS( ...
     hvo_dieselDir, hvo_dieselEmisFile, LHV_HVO_diesel, AFRst_HVO_diesel, ...
-    M_mix, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
-    Vd, n_engine, nonren_HVO_diesel);
+    eta_v, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
+    Vd, n_engine, nonren_HVO_diesel, use_lambda);
 
 resultsGTLDiesel = compute_g_per_MJ_with_soot_and_BS( ...
     gtl_dieselDir, GTL_dieselEmisFile, LHV_GTL_diesel, AFRst_GTL_diesel, ...
-    M_mix, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
-    Vd, n_engine, nonren_GTL_diesel);
+    eta_v, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
+    Vd, n_engine, nonren_GTL_diesel, use_lambda);
 
 % ============================================================
 % Display in command window
@@ -109,17 +115,17 @@ disp(resultsGTL);
 disp('=== HVO/Diesel emission factors [g/MJ fuel] + BS emissions ===');
 disp(resultsHVODiesel);
 
-% disp('=== GTL/Diesel emission factors [g/MJ fuel] + BS emissions ===');
-% disp(resultsGTLDiesel);
+disp('=== GTL/Diesel emission factors [g/MJ fuel] + BS emissions ===');
+disp(resultsGTLDiesel);
 
 % ============================================================
 % Write to CSV (for LaTeX tables etc.)
 % ============================================================
-writetable(resultsDiesel,    'Diesel_g_per_MJ.csv');
-writetable(resultsHVO,       'HVO_g_per_MJ.csv');
-writetable(resultsGTL,       'GTL_g_per_MJ.csv');
-writetable(resultsHVODiesel, 'HVO_Diesel_g_per_MJ.csv');
-writetable(resultsGTLDiesel, 'GTL_Diesel_g_per_MJ.csv');
+writetable(resultsDiesel,    'Results/Diesel_g_per_MJ.csv');
+writetable(resultsHVO,       'Results/HVO_g_per_MJ.csv');
+writetable(resultsGTL,       'Results/GTL_g_per_MJ.csv');
+writetable(resultsHVODiesel, 'Results/HVO_Diesel_g_per_MJ.csv');
+writetable(resultsGTLDiesel, 'Results/GTL_Diesel_g_per_MJ.csv');
 
 
 
@@ -137,8 +143,8 @@ writetable(resultsGTLDiesel, 'GTL_Diesel_g_per_MJ.csv');
 
 function results = compute_g_per_MJ_with_soot_and_BS( ...
     sdaqDir, emisFile, LHV_MJkg, AFRst, ...
-    M_mix, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
-    Vd, n_engine, nonren_factor)
+    eta_v, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
+    Vd, n_engine, nonren_factor, use_lamba)
 
     % Read emissions table (one row per operating point)
     emis = readtable(emisFile);
@@ -181,7 +187,7 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
 
     bara = 1e5; % [Pa/bar]
 
-    V_molar_STP  = 22.414e-3;  % [m^3/mol] molar volume at STP
+    rho_air = 1.200012; % [kg/m^3]
 
 
     for k = 1:nOP
@@ -230,6 +236,15 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         p_smooth = sgolayfilt(p_avg, 3, 81);   % (order 3, window 81 samples)
 
         % --------------------------------------------------------
+        % Extract Exhaust Pressure (180 to 360 deg CA)
+        % --------------------------------------------------------
+        % Find indices corresponding to 180-360 deg CA
+        idx_exhaust = (Ca(:,1) >= 149) & (Ca(:,1) <= 340);
+        
+        % Average the smoothed pressure over the exhaust stroke
+        P_exhaust = mean(p_smooth(idx_exhaust));  % [Pa]
+
+        % --------------------------------------------------------
         % Emission inputs from CSV
         % --------------------------------------------------------
         opName(k) = string(emis.Name{k});
@@ -254,6 +269,16 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         % Fuel energy rate [MJ/s]
         Edot_MJ_s = mfuel_kg_s * LHV_MJkg;   % [MJ/s]
 
+        mair_kg_s_in = rho_air * Vd * eta_v * (n_engine/120); % [kg/s]
+        mexh_kg_s_in = mair_kg_s_in + mfuel_kg_s; % [kg/s]
+
+
+        if use_lamba == true
+            mdot_exhaust_total = mexh_kg_s;
+        else
+            mdot_exhaust_total = mexh_kg_s_in;
+        end
+
         % --------------------------------------------------------
         % Dry-gas concentrations
         % --------------------------------------------------------
@@ -261,24 +286,22 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         x_CO2 = CO2_volpct / 100;
         x_HC  = HC_ppm  / 1e5; % ppm*10
         x_NOx = NOx_ppm / 1e6;
-        
-        % --------------------------------------------------------
-        % temperature corrected exhaust density and volume
-        % --------------------------------------------------------
-        T_correction = 273.15 / Texh_mean_K;
 
-        % Exhaust density and volumetric flow
-        rho_exhaust = p_ref * M_exhaust / (R_u * Texh_mean_K);% [kg/m^3]
-        V_exhaust   = mexh_kg_s / rho_exhaust;                   % [m^3/s]
+        % --------------------------------------------------------
+        % Average Molecular Weight of Exhaust
+        % --------------------------------------------------------
+        % Based on measured concentrations (dry basis typically)
+        M_exhaust_avg = M_exhaust;
 
         % --------------------------------------------------------
         % Gas species mass flows [kg/s]
         % --------------------------------------------------------
-        mdot_CO   = x_CO  * V_exhaust * (M_CO / V_molar_STP) * T_correction;     % [kg/s]
-        mdot_CO2  = x_CO2 * V_exhaust * (M_CO2 / V_molar_STP) * T_correction;    % [kg/s]
-        mdot_HC   = x_HC  * V_exhaust * (M_HC / V_molar_STP) * T_correction;     % [kg/s]
-        mdot_NOx  = x_NOx * V_exhaust * (M_NOx / V_molar_STP) * T_correction;    % [kg/s]
-        mdot_NNox = mdot_NOx * ((21-15)/(21 - O2_volpct));
+
+        mdot_CO  = (x_CO  * M_CO  / M_exhaust_avg) * mdot_exhaust_total; % [kg/s]
+        mdot_CO2 = (x_CO2 * M_CO2 / M_exhaust_avg) * mdot_exhaust_total; % [kg/s]
+        mdot_HC  = (x_HC  * M_HC  / M_exhaust_avg) * mdot_exhaust_total; % [kg/s]
+        mdot_NOx = (x_NOx * M_NOx / M_exhaust_avg) * mdot_exhaust_total; % [kg/s]
+        mdot_NNox = mdot_NOx * ((21-15)/(21 - O2_volpct));                
 
         % Emission indices [g/MJ fuel]
         EI_CO(k)  = (mdot_CO  * 1000) / Edot_MJ_s;
