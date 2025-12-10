@@ -294,6 +294,17 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         M_exhaust_avg = M_exhaust;
 
         % --------------------------------------------------------
+        % volumetric exhaust flow
+        % --------------------------------------------------------
+        % Density of exhaust gas at actual conditions
+        rho_exhaust = (P_exhaust * M_exhaust_avg) / (R_u * Texh_mean_K); % [kg/m³]
+        
+        % Volumetric flow rate at actual exhaust conditions
+        V_exhaust = mdot_exhaust_total / rho_exhaust; % [m³/s]
+
+
+
+        % --------------------------------------------------------
         % Gas species mass flows [kg/s]
         % --------------------------------------------------------
 
