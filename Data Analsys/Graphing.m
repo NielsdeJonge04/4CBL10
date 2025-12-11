@@ -40,6 +40,7 @@ emission_data = readtable(csv_file);
 % User inputs for selection
 CA_value = 12;      % [deg] Combustion advance (12, 15, or 18)
 IMEP_value = 1.5;   % [bar] IMEP (1.5, 2.5, or 3.5)
+use_variable_gamma = true; % can switch of variable vs non variable gamma
 
 % Static parameters (not in CSV)
 AFR_stoich = 14.5;       % [-] stoich AFR for diesel
@@ -231,210 +232,219 @@ IMEP  = W_ind / (max(V_sel)-min(V_sel));     % [Pa] = [J/m^3]
 fprintf('Indicated work: %.2f J/cycle\n', W_ind);
 fprintf('IMEP (from p-V): %.2f bar\n', IMEP/bara);
 
+
+
 %% =============================================================
 % ROHR (using smoothed pressure)
 gamma  = 1.33;                               % constant gamma
 dtheta = deg2rad(mean(diff(Ca_sel)));        % [rad/step]
-
+    
 dp_dtheta = gradient(p_smooth, dtheta);      % [Pa/rad]
 dV_dtheta = gradient(V_sel    , dtheta);     % [m^3/rad]
 
-ROHR = (gamma/(gamma-1))*p_smooth.*dV_dtheta + ...
-       (1/(gamma-1))*V_sel.*dp_dtheta;       % [J/rad]
-
-% Convert to J/deg:
-ROHR_deg = ROHR * (pi/180);                  % [J/deg]
-
-% Restrict to combustion window and smooth again:
 comb_mask   = (Ca_sel >= -40) & (Ca_sel <= 120);
-Ca_c        = Ca_sel(comb_mask);
-ROHR_c      = ROHR_deg(comb_mask);
-ROHR_smooth = sgolayfilt(ROHR_c, 3, 31);
 
+if use_variable_gamma == false
+  
+    ROHR = (gamma/(gamma-1))*p_smooth.*dV_dtheta + ...
+           (1/(gamma-1))*V_sel.*dp_dtheta;       % [J/rad]
+    
+    % Convert to J/deg:
+    ROHR_deg = ROHR * (pi/180);                  % [J/deg]
+    
+    % Restrict to combustion window and smooth again:
+    
+    Ca_c        = Ca_sel(comb_mask);
+    ROHR_c      = ROHR_deg(comb_mask);
+    ROHR_smooth = sgolayfilt(ROHR_c, 3, 31);
 
+else
 
-%% =============================================================
-% VARIABLE GAMMA ROHR CALCULATION
-%% =============================================================
-
-% 1. Initial conditions
-T_intake = mean(Tint) + 273.15;  % [K]
-
-% --- PRE-COMBUSTION MIXTURE (fresh charge) ---
-% Calculate mass of fresh charge per cycle
-cycles_per_sec = n_test / 120;
-mfuelinj = mfuel_mean / cycles_per_sec;  % [kg/cycle]
-
-% DIAGNOSTIC: Print what we have
-fprintf('\n========== DEBUGGING MASS CALCULATION ==========\n');
-fprintf('Engine speed: %.0f rpm\n', n_test);
-fprintf('Cycles per second: %.2f\n', cycles_per_sec);
-fprintf('Fuel per cycle: %.6f kg\n', mfuelinj);
-fprintf('Displaced volume Vd: %.6f m^3\n', Vd);
-fprintf('Air density: %.3f kg/m^3\n', rho_air);
-fprintf('Volumetric efficiency: %.2f\n', eta_v);
-
-M_mean = MAir; 
-R_mixpre = (Runiv / MAir)   % [J/(kg·K)]
-
-P_ivc = p_ref          % intake pressure
-T_ivc = T_intake      % intake temperature
-V_ivc = CylinderVolume(-180, Cyl)
-m_trapped = (P_ivc * V_ivc) / (R_mixpre * T_ivc)
-Ttest = (P_ivc * V_ivc) / (m_trapped * R_mixpre );
-% Calculate total moles of air
-n_air_total = m_trapped / MAir;  % [mol] (MAir in g/mol -> kg/mol)
-
-fprintf('\nAir composition:\n');
-fprintf('  Total air moles: %.4f mol\n', n_air_total);
-fprintf('  Mean air molar mass: %.2f kg/mol\n', MAir);
-
-% --- FUEL ELEMENTAL ANALYSIS ---
-m_C_fuel = mfuelinj * FuelWeightPercent.C;
-m_H_fuel = mfuelinj * FuelWeightPercent.H;
-m_O_fuel = mfuelinj * FuelWeightPercent.O;
-n_C_fuel = m_C_fuel / M_atom.C;
-n_H_fuel = m_H_fuel / M_atom.H;
-n_O_fuel = m_O_fuel / M_atom.O;
-
-% --- STOICHIOMETRIC COMBUSTION ---
-O2_for_C = n_C_fuel;
-O2_for_H = n_H_fuel / 4;
-O2_from_fuel = n_O_fuel / 2;
-O2_consumed = O2_for_C + O2_for_H - O2_from_fuel;
-CO2_produced = n_C_fuel;
-H2O_produced = n_H_fuel / 2;
-
-fprintf('\nCombustion:\n');
-fprintf('  O2 consumed: %.4f mol\n', O2_consumed);
-fprintf('  CO2 produced: %.4f mol\n', CO2_produced);
-fprintf('  H2O produced: %.4f mol\n', H2O_produced);
-
-% --- POST-COMBUSTION MIXTURE ---
-m_species = Yair * m_trapped;
-n_species = m_species ./ Mi;
-n_post = n_species;      % start with air composition
-n_post(1) = 0;           % no diesel vapor — already included in mfuelinj
-n_post(2) = n_post(2) - O2_consumed;
-n_post(4) = n_post(4) + CO2_produced;
-n_post(5) = n_post(5) + H2O_produced;
-
-% Mass fractions of combustion products
-m_post = n_post .* Mi;
-Ypost = m_post / sum(m_post);
-M_mean_post = sum(n_post.*Mi) / sum(n_post);   % molar mass in kg/mol
-R_mixpost = Runiv / M_mean_post;
-
-fprintf('  Post-combustion mean molar mass: %.2f kg/mol\n', M_mean_post);
-fprintf('\nGas constants:\n');
-fprintf('  R_mixpre: %.1f J/(kg·K)\n', R_mixpre);
-fprintf('  R_mixpost: %.1f J/(kg·K)\n', R_mixpost);
-
-% Calculate total mass in cylinder per cycle
-m_total_pre = m_trapped;                     % Before combustion
-m_total_post = m_trapped + mfuelinj;         % After combustion (includes fuel)
-
-fprintf('\nTotal mass in cylinder:\n');
-fprintf('  Pre-combustion: %.6f kg\n', m_total_pre);
-fprintf('  Post-combustion: %.6f kg\n', m_total_post);
-
-
-
-% 4. TEST CALCULATION at one point
-test_idx = find(Ca_sel >= -10 & Ca_sel <= 0, 1);  % Near TDC, before combustion
-fprintf('\nTest calculation at CA = %.1f deg:\n', Ca_sel(test_idx));
-fprintf('  Pressure: %.2f bar\n', p_smooth(test_idx)/bara);
-fprintf('  Volume: %.6f m^3\n', V_sel(test_idx));
-T_test = (p_smooth(test_idx) * V_sel(test_idx)) / (m_total_pre * R_mixpre);
-fprintf('  Calculated T: %.1f K (%.1f C)\n', T_test, T_test-273.15);
-fprintf('  Expected T: ~600-800 K\n');
-
-% Calculate variable gamma and temperature at each crank angle
-gamma = zeros(size(Ca_sel));
-T = zeros(size(Ca_sel));
-Cpi = zeros(1, NSp);
-Cvi = zeros(1, NSp);
-
-for idx = 1:length(Ca_sel)
-    % ---- DETERMINE COMPOSITION AT THIS CRANK ANGLE ----
-    if Ca_sel(idx) < 0
-        % Before combustion: fresh charge
-        Y_current = Yair;
-        R_current = R_mixpre;
-        m_current = m_total_pre;
+    %% =============================================================
+    % VARIABLE GAMMA ROHR CALCULATION
+    %% =============================================================
+    
+    % 1. Initial conditions
+    T_intake = mean(Tint) + 273.15;  % [K]
+    
+    % --- PRE-COMBUSTION MIXTURE (fresh charge) ---
+    % Calculate mass of fresh charge per cycle
+    cycles_per_sec = n_test / 120;
+    mfuelinj = mfuel_mean / cycles_per_sec;  % [kg/cycle]
+    
+    % DIAGNOSTIC: Print what we have
+    fprintf('\n========== DEBUGGING MASS CALCULATION ==========\n');
+    fprintf('Engine speed: %.0f rpm\n', n_test);
+    fprintf('Cycles per second: %.2f\n', cycles_per_sec);
+    fprintf('Fuel per cycle: %.6f kg\n', mfuelinj);
+    fprintf('Displaced volume Vd: %.6f m^3\n', Vd);
+    fprintf('Air density: %.3f kg/m^3\n', rho_air);
+    fprintf('Volumetric efficiency: %.2f\n', eta_v);
+    
+    M_mean = MAir; 
+    R_mixpre = (Runiv / MAir)   % [J/(kg·K)]
+    
+    P_ivc = p_ref          % intake pressure
+    T_ivc = T_intake      % intake temperature
+    V_ivc = CylinderVolume(-180, Cyl)
+    m_trapped = (P_ivc * V_ivc) / (R_mixpre * T_ivc)
+    Ttest = (P_ivc * V_ivc) / (m_trapped * R_mixpre );
+    % Calculate total moles of air
+    n_air_total = m_trapped / MAir;  % [mol] (MAir in g/mol -> kg/mol)
+    
+    fprintf('\nAir composition:\n');
+    fprintf('  Total air moles: %.4f mol\n', n_air_total);
+    fprintf('  Mean air molar mass: %.2f kg/mol\n', MAir);
+    
+    % --- FUEL ELEMENTAL ANALYSIS ---
+    m_C_fuel = mfuelinj * FuelWeightPercent.C;
+    m_H_fuel = mfuelinj * FuelWeightPercent.H;
+    m_O_fuel = mfuelinj * FuelWeightPercent.O;
+    n_C_fuel = m_C_fuel / M_atom.C;
+    n_H_fuel = m_H_fuel / M_atom.H;
+    n_O_fuel = m_O_fuel / M_atom.O;
+    
+    % --- STOICHIOMETRIC COMBUSTION ---
+    O2_for_C = n_C_fuel;
+    O2_for_H = n_H_fuel / 4;
+    O2_from_fuel = n_O_fuel / 2;
+    O2_consumed = O2_for_C + O2_for_H - O2_from_fuel;
+    CO2_produced = n_C_fuel;
+    H2O_produced = n_H_fuel / 2;
+    
+    fprintf('\nCombustion:\n');
+    fprintf('  O2 consumed: %.4f mol\n', O2_consumed);
+    fprintf('  CO2 produced: %.4f mol\n', CO2_produced);
+    fprintf('  H2O produced: %.4f mol\n', H2O_produced);
+    
+    % --- POST-COMBUSTION MIXTURE ---
+    m_species = Yair * m_trapped;
+    n_species = m_species ./ Mi;
+    n_post = n_species;      % start with air composition
+    n_post(1) = 0;           % no diesel vapor — already included in mfuelinj
+    n_post(2) = n_post(2) - O2_consumed;
+    n_post(4) = n_post(4) + CO2_produced;
+    n_post(5) = n_post(5) + H2O_produced;
+    
+    % Mass fractions of combustion products
+    m_post = n_post .* Mi;
+    Ypost = m_post / sum(m_post);
+    M_mean_post = sum(n_post.*Mi) / sum(n_post);   % molar mass in kg/mol
+    R_mixpost = Runiv / M_mean_post;
+    
+    fprintf('  Post-combustion mean molar mass: %.2f kg/mol\n', M_mean_post);
+    fprintf('\nGas constants:\n');
+    fprintf('  R_mixpre: %.1f J/(kg·K)\n', R_mixpre);
+    fprintf('  R_mixpost: %.1f J/(kg·K)\n', R_mixpost);
+    
+    % Calculate total mass in cylinder per cycle
+    m_total_pre = m_trapped;                     % Before combustion
+    m_total_post = m_trapped + mfuelinj;         % After combustion (includes fuel)
+    
+    fprintf('\nTotal mass in cylinder:\n');
+    fprintf('  Pre-combustion: %.6f kg\n', m_total_pre);
+    fprintf('  Post-combustion: %.6f kg\n', m_total_post);
+    
+    
+    
+    % 4. TEST CALCULATION at one point
+    test_idx = find(Ca_sel >= -10 & Ca_sel <= 0, 1);  % Near TDC, before combustion
+    fprintf('\nTest calculation at CA = %.1f deg:\n', Ca_sel(test_idx));
+    fprintf('  Pressure: %.2f bar\n', p_smooth(test_idx)/bara);
+    fprintf('  Volume: %.6f m^3\n', V_sel(test_idx));
+    T_test = (p_smooth(test_idx) * V_sel(test_idx)) / (m_total_pre * R_mixpre);
+    fprintf('  Calculated T: %.1f K (%.1f C)\n', T_test, T_test-273.15);
+    fprintf('  Expected T: ~600-800 K\n');
+    
+    % Calculate variable gamma and temperature at each crank angle
+    gamma = zeros(size(Ca_sel));
+    T = zeros(size(Ca_sel));
+    Cpi = zeros(1, NSp);
+    Cvi = zeros(1, NSp);
+    
+    for idx = 1:length(Ca_sel)
+        % ---- DETERMINE COMPOSITION AT THIS CRANK ANGLE ----
+        if Ca_sel(idx) < 0
+            % Before combustion: fresh charge
+            Y_current = Yair;
+            R_current = R_mixpre;
+            m_current = m_total_pre;
+            
+        else
+            % After combustion: fully burned products
+            Y_current = Ypost;
+            R_current = R_mixpost;
+            m_current = m_total_post;
+        end
         
-    else
-        % After combustion: fully burned products
-        Y_current = Ypost;
-        R_current = R_mixpost;
-        m_current = m_total_post;
+        if (Ca_sel(idx)) > -180 &&  (Ca_sel(idx)) < 180
+            % ---- CALCULATE TEMPERATURE FROM IDEAL GAS LAW ----
+            p_smooth(idx)
+            V_sel(idx)
+            m_current
+            R_current
+            T(idx) = (p_smooth(idx) * V_sel(idx)) / (m_current * R_current);  % [K]
+        else
+            T(idx) = T_intake;
+        end
+        % Convert species Cp, Cv (molar) to mass-based values:
+        for i = 1:NSp
+            Cp_mass(i) = CpNasa(T(idx), SpS(i)) / Mi(i);  % J/kg/K
+            Cv_mass(i) = CvNasa(T(idx), SpS(i)) / Mi(i);  % J/kg/K
+        end
+        
+        % mass-fraction weighted mixture properties
+        cp = Y_current * Cp_mass';
+        cv = Y_current * Cv_mass';
+        
+        gamma(idx) = cp / cv;
+        
     end
     
-    if (Ca_sel(idx)) > -180 &&  (Ca_sel(idx)) < 180
-        % ---- CALCULATE TEMPERATURE FROM IDEAL GAS LAW ----
-        p_smooth(idx)
-        V_sel(idx)
-        m_current
-        R_current
-        T(idx) = (p_smooth(idx) * V_sel(idx)) / (m_current * R_current);  % [K]
-    else
-        T(idx) = T_intake;
-    end
-    % Convert species Cp, Cv (molar) to mass-based values:
-    for i = 1:NSp
-        Cp_mass(i) = CpNasa(T(idx), SpS(i)) / Mi(i);  % J/kg/K
-        Cv_mass(i) = CvNasa(T(idx), SpS(i)) / Mi(i);  % J/kg/K
-    end
+    fprintf('\nPost-fix diagnostics:\n');
+    fprintf('  n_C_fuel = %.6e mol, n_H_fuel = %.6e mol\n', n_C_fuel, n_H_fuel);
+    fprintf('  O2_consumed = %.6e mol\n', O2_consumed);
+    fprintf('  CO2_produced = %.6e mol, H2O_produced = %.6e mol\n', CO2_produced, H2O_produced);
+    fprintf('  Min T (pre-scan) = %.1f K (%.1f C)\n', min(T), min(T)-273.15);
+    fprintf('  Max T = %.1f K (%.1f C)\n', max(T), max(T)-273.15);
     
-    % mass-fraction weighted mixture properties
-    cp = Y_current * Cp_mass';
-    cv = Y_current * Cv_mass';
+    fprintf('\nTemperature range:\n');
+    fprintf('  Min: %.1f K (%.1f C)\n', min(T), min(T)-273.15);
+    fprintf('  Max: %.1f K (%.1f C)\n', max(T), max(T)-273.15);
+    fprintf('=========================================\n\n');
     
-    gamma(idx) = cp / cv;
+    % 6. Calculate ROHR with variable gamma
+    ROHR = gamma./(gamma-1) .* p_smooth .* dV_dtheta + ...
+           1./(gamma-1) .* V_sel .* dp_dtheta;
     
+    % 7. Convert to J/deg and continue with existing analysis
+    ROHR_deg = ROHR * (pi/180);
+    
+    %gamma diagnosis
+
+    gamma_min = min(gamma);
+    gamma_max = max(gamma);
+    
+    gamma_delta = gamma_max - gamma_min
+    
+    % Plot variable gamma for diagnostics
+    figure;
+    subplot(2,1,1)
+    plot(Ca_sel, gamma, 'LineWidth', 1.5);
+    xlabel('Crank angle [deg]');
+    ylabel('Gamma [-]');
+    title('Variable Gamma vs Crank Angle');
+    grid on;
+    yline(1.33, '--r', 'Constant \gamma = 1.33');
+    legend('Variable \gamma', 'Constant \gamma');
+    
+    subplot(2,1,2)
+    plot(Ca_sel, T - 273.15, 'LineWidth', 1.5);
+    xlabel('Crank angle [deg]');
+    ylabel('Temperature [°C]');
+    title('In-Cylinder Temperature vs Crank Angle');
+    grid on;
 end
-
-fprintf('\nPost-fix diagnostics:\n');
-fprintf('  n_C_fuel = %.6e mol, n_H_fuel = %.6e mol\n', n_C_fuel, n_H_fuel);
-fprintf('  O2_consumed = %.6e mol\n', O2_consumed);
-fprintf('  CO2_produced = %.6e mol, H2O_produced = %.6e mol\n', CO2_produced, H2O_produced);
-fprintf('  Min T (pre-scan) = %.1f K (%.1f C)\n', min(T), min(T)-273.15);
-fprintf('  Max T = %.1f K (%.1f C)\n', max(T), max(T)-273.15);
-
-fprintf('\nTemperature range:\n');
-fprintf('  Min: %.1f K (%.1f C)\n', min(T), min(T)-273.15);
-fprintf('  Max: %.1f K (%.1f C)\n', max(T), max(T)-273.15);
-fprintf('=========================================\n\n');
-
-% 6. Calculate ROHR with variable gamma
-ROHR = gamma./(gamma-1) .* p_smooth .* dV_dtheta + ...
-       1./(gamma-1) .* V_sel .* dp_dtheta;
-
-% 7. Convert to J/deg and continue with existing analysis
-ROHR_deg = ROHR * (pi/180);
-
-gamma_min = min(gamma);
-gamma_max = max(gamma);
-
-gamma_delta = gamma_max - gamma_min
-
-% Plot variable gamma for diagnostics
-figure;
-subplot(2,1,1)
-plot(Ca_sel, gamma, 'LineWidth', 1.5);
-xlabel('Crank angle [deg]');
-ylabel('Gamma [-]');
-title('Variable Gamma vs Crank Angle');
-grid on;
-yline(1.33, '--r', 'Constant \gamma = 1.33');
-legend('Variable \gamma', 'Constant \gamma');
-
-subplot(2,1,2)
-plot(Ca_sel, T - 273.15, 'LineWidth', 1.5);
-xlabel('Crank angle [deg]');
-ylabel('Temperature [°C]');
-title('In-Cylinder Temperature vs Crank Angle');
-grid on;
 
 % Continue with existing combustion window analysis
 Ca_c = Ca_sel(comb_mask);
