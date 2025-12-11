@@ -169,7 +169,7 @@ for i = 1:NSp
 end
 cp1 = Yair * Cpi1';             % Mass-weighted Cp for air [J/(kg·K)]
 cv1 = Yair * Cvi1';             % Mass-weighted Cv for air [J/(kg·K)]
-gamma1 = 1.175;                   % Specific heat ratio (approximate calculation doesnt hold due to heat losses)
+gamma1 = cp1/cv1;               % Specific heat ratio
 
 % Apply isentropic compression: p*V^gamma = constant
 compression_indices = (Ca >= CaIVC) & (Ca <= 0);
