@@ -109,8 +109,9 @@ rho_air = 1.200012; % [kg/m^3]
 eta_v = 0.95;
 
 
-% Atomic masses [g/mol]
-M_atom = struct('C', 12.01, 'H', 1.008, 'O', 16.00);
+% Atomic masses [kg/mol]
+M_atom = struct('C', 12.01e-3, 'H', 1.008e-3, 'O', 16.00e-3);
+
 
 % Air composition (molar fractions)
 Xair = [0 0.21 0.79 0 0];       % [Diesel, O2, N2, CO2, H2O]
@@ -274,13 +275,13 @@ fprintf('Air density: %.3f kg/m^3\n', rho_air);
 fprintf('Volumetric efficiency: %.2f\n', eta_v);
 
 M_mean = MAir; 
-R_mixpre = (Runiv / MAir);   % [J/(kg·K)]
+R_mixpre = (Runiv / MAir)   % [J/(kg·K)]
 
-P_ivc = p_ref;          % intake pressure
-T_ivc = T_intake;      % intake temperature
-V_ivc = CylinderVolume(-180, Cyl);
-m_trapped = (P_ivc * V_ivc) / (R_mixpre * T_ivc);
-
+P_ivc = p_ref          % intake pressure
+T_ivc = T_intake      % intake temperature
+V_ivc = CylinderVolume(-180, Cyl)
+m_trapped = (P_ivc * V_ivc) / (R_mixpre * T_ivc)
+Ttest = (P_ivc * V_ivc) / (m_trapped * R_mixpre );
 % Calculate total moles of air
 n_air_total = m_trapped / MAir;  % [mol] (MAir in g/mol -> kg/mol)
 
@@ -310,23 +311,21 @@ fprintf('  CO2 produced: %.4f mol\n', CO2_produced);
 fprintf('  H2O produced: %.4f mol\n', H2O_produced);
 
 % --- POST-COMBUSTION MIXTURE ---
-Mmixpost = m_trapped./Yair;
-Mmixpost(1) = 0;                                % All diesel consumed
-Mmixpost(2) = Mmixpost(2) - O2_consumed;        % O2 consumed
-Mmixpost(4) = Mmixpost(4) + CO2_produced;       % CO2 produced
-Mmixpost(5) = Mmixpost(5) + H2O_produced;       % H2O produced
+m_species = Yair * m_trapped;
+n_species = m_species ./ Mi;
+n_post = n_species;      % start with air composition
+n_post(1) = 0;           % no diesel vapor — already included in mfuelinj
+n_post(2) = n_post(2) - O2_consumed;
+n_post(4) = n_post(4) + CO2_produced;
+n_post(5) = n_post(5) + H2O_produced;
 
 % Mass fractions of combustion products
-M_mixpost_total = Mmixpost * Mi';
-Xpost = Mmixpost / sum(Mmixpost);
-Ypost = Xpost .* Mi / M_mixpost_total;
-M_mean_post = sum(Mmixpost .* Mi) / sum(Mmixpost); 
+m_post = n_post .* Mi;
+Ypost = m_post / sum(m_post);
+M_mean_post = sum(n_post.*Mi) / sum(n_post);   % molar mass in kg/mol
+R_mixpost = Runiv / M_mean_post;
 
 fprintf('  Post-combustion mean molar mass: %.2f kg/mol\n', M_mean_post);
-
-% Gas constant for mixture (will vary with composition)
-R_mixpost = (Runiv / M_mean_post); % [J/(kg·K)]
-
 fprintf('\nGas constants:\n');
 fprintf('  R_mixpre: %.1f J/(kg·K)\n', R_mixpre);
 fprintf('  R_mixpost: %.1f J/(kg·K)\n', R_mixpost);
@@ -338,6 +337,8 @@ m_total_post = m_trapped + mfuelinj;         % After combustion (includes fuel)
 fprintf('\nTotal mass in cylinder:\n');
 fprintf('  Pre-combustion: %.6f kg\n', m_total_pre);
 fprintf('  Post-combustion: %.6f kg\n', m_total_post);
+
+
 
 % 4. TEST CALCULATION at one point
 test_idx = find(Ca_sel >= -10 & Ca_sel <= 0, 1);  % Near TDC, before combustion
@@ -369,9 +370,16 @@ for idx = 1:length(Ca_sel)
         m_current = m_total_post;
     end
     
-    % ---- CALCULATE TEMPERATURE FROM IDEAL GAS LAW ----
-    T(idx) = (p_smooth(idx) * V_sel(idx)) / (m_current * R_current);  % [K]
-    
+    if (Ca_sel(idx)) > -180 &&  (Ca_sel(idx)) < 180
+        % ---- CALCULATE TEMPERATURE FROM IDEAL GAS LAW ----
+        p_smooth(idx)
+        V_sel(idx)
+        m_current
+        R_current
+        T(idx) = (p_smooth(idx) * V_sel(idx)) / (m_current * R_current);  % [K]
+    else
+        T(idx) = T_intake;
+    end
     % Convert species Cp, Cv (molar) to mass-based values:
     for i = 1:NSp
         Cp_mass(i) = CpNasa(T(idx), SpS(i)) / Mi(i);  % J/kg/K
@@ -385,6 +393,13 @@ for idx = 1:length(Ca_sel)
     gamma(idx) = cp / cv;
     
 end
+
+fprintf('\nPost-fix diagnostics:\n');
+fprintf('  n_C_fuel = %.6e mol, n_H_fuel = %.6e mol\n', n_C_fuel, n_H_fuel);
+fprintf('  O2_consumed = %.6e mol\n', O2_consumed);
+fprintf('  CO2_produced = %.6e mol, H2O_produced = %.6e mol\n', CO2_produced, H2O_produced);
+fprintf('  Min T (pre-scan) = %.1f K (%.1f C)\n', min(T), min(T)-273.15);
+fprintf('  Max T = %.1f K (%.1f C)\n', max(T), max(T)-273.15);
 
 fprintf('\nTemperature range:\n');
 fprintf('  Min: %.1f K (%.1f C)\n', min(T), min(T)-273.15);
