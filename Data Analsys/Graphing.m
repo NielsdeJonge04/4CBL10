@@ -133,7 +133,6 @@ Cyl.CompressionRatio = 21.5;
 Cyl.ConRod           = 136.5*mm;
 Cyl.TDCangle         = 0;          % TDC reference
 n_engine             = 1500; % RPM
-Vd = CylinderVolume(180, Cyl)-CylinderVolume(0, Cyl);
 
 %% ======================
 % LOAD FAST DATA (fdaq)
@@ -242,8 +241,6 @@ dtheta = deg2rad(mean(diff(Ca_sel)));        % [rad/step]
 dp_dtheta = gradient(p_smooth, dtheta);      % [Pa/rad]
 dV_dtheta = gradient(V_sel    , dtheta);     % [m^3/rad]
 
-comb_mask   = (Ca_sel >= -40) & (Ca_sel <= 120);
-
 if use_variable_gamma == false
   
     ROHR = (gamma/(gamma-1))*p_smooth.*dV_dtheta + ...
@@ -251,13 +248,6 @@ if use_variable_gamma == false
     
     % Convert to J/deg:
     ROHR_deg = ROHR * (pi/180);                  % [J/deg]
-    
-    % Restrict to combustion window and smooth again:
-    
-    Ca_c        = Ca_sel(comb_mask);
-    ROHR_c      = ROHR_deg(comb_mask);
-    ROHR_smooth = sgolayfilt(ROHR_c, 3, 31);
-
 else
 
     %% =============================================================
