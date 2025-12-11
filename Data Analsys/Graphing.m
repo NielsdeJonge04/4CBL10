@@ -272,29 +272,17 @@ else
     cycles_per_sec = n_test / 120;
     mfuelinj = mfuel_mean / cycles_per_sec;  % [kg/cycle]
     
-    % DIAGNOSTIC: Print what we have
-    fprintf('\n========== DEBUGGING MASS CALCULATION ==========\n');
-    fprintf('Engine speed: %.0f rpm\n', n_test);
-    fprintf('Cycles per second: %.2f\n', cycles_per_sec);
-    fprintf('Fuel per cycle: %.6f kg\n', mfuelinj);
-    fprintf('Displaced volume Vd: %.6f m^3\n', Vd);
-    fprintf('Air density: %.3f kg/m^3\n', rho_air);
-    fprintf('Volumetric efficiency: %.2f\n', eta_v);
     
     M_mean = MAir; 
-    R_mixpre = (Runiv / MAir)   % [J/(kg·K)]
+    R_mixpre = (Runiv / MAir);   % [J/(kg·K)]
     
-    P_ivc = p_ref          % intake pressure
-    T_ivc = T_intake      % intake temperature
-    V_ivc = CylinderVolume(-180, Cyl)
-    m_trapped = (P_ivc * V_ivc) / (R_mixpre * T_ivc)
+    P_ivc = p_ref;          % intake pressure
+    T_ivc = T_intake;     % intake temperature
+    V_ivc = CylinderVolume(-180, Cyl);
+    m_trapped = (P_ivc * V_ivc) / (R_mixpre * T_ivc);
     Ttest = (P_ivc * V_ivc) / (m_trapped * R_mixpre );
     % Calculate total moles of air
     n_air_total = m_trapped / MAir;  % [mol] (MAir in g/mol -> kg/mol)
-    
-    fprintf('\nAir composition:\n');
-    fprintf('  Total air moles: %.4f mol\n', n_air_total);
-    fprintf('  Mean air molar mass: %.2f kg/mol\n', MAir);
     
     % --- FUEL ELEMENTAL ANALYSIS ---
     m_C_fuel = mfuelinj * FuelWeightPercent.C;
@@ -312,11 +300,6 @@ else
     CO2_produced = n_C_fuel;
     H2O_produced = n_H_fuel / 2;
     
-    fprintf('\nCombustion:\n');
-    fprintf('  O2 consumed: %.4f mol\n', O2_consumed);
-    fprintf('  CO2 produced: %.4f mol\n', CO2_produced);
-    fprintf('  H2O produced: %.4f mol\n', H2O_produced);
-    
     % --- POST-COMBUSTION MIXTURE ---
     m_species = Yair * m_trapped;
     n_species = m_species ./ Mi;
@@ -332,29 +315,9 @@ else
     M_mean_post = sum(n_post.*Mi) / sum(n_post);   % molar mass in kg/mol
     R_mixpost = Runiv / M_mean_post;
     
-    fprintf('  Post-combustion mean molar mass: %.2f kg/mol\n', M_mean_post);
-    fprintf('\nGas constants:\n');
-    fprintf('  R_mixpre: %.1f J/(kg·K)\n', R_mixpre);
-    fprintf('  R_mixpost: %.1f J/(kg·K)\n', R_mixpost);
-    
     % Calculate total mass in cylinder per cycle
     m_total_pre = m_trapped;                     % Before combustion
     m_total_post = m_trapped + mfuelinj;         % After combustion (includes fuel)
-    
-    fprintf('\nTotal mass in cylinder:\n');
-    fprintf('  Pre-combustion: %.6f kg\n', m_total_pre);
-    fprintf('  Post-combustion: %.6f kg\n', m_total_post);
-    
-    
-    
-    % 4. TEST CALCULATION at one point
-    test_idx = find(Ca_sel >= -10 & Ca_sel <= 0, 1);  % Near TDC, before combustion
-    fprintf('\nTest calculation at CA = %.1f deg:\n', Ca_sel(test_idx));
-    fprintf('  Pressure: %.2f bar\n', p_smooth(test_idx)/bara);
-    fprintf('  Volume: %.6f m^3\n', V_sel(test_idx));
-    T_test = (p_smooth(test_idx) * V_sel(test_idx)) / (m_total_pre * R_mixpre);
-    fprintf('  Calculated T: %.1f K (%.1f C)\n', T_test, T_test-273.15);
-    fprintf('  Expected T: ~600-800 K\n');
     
     % Calculate variable gamma and temperature at each crank angle
     gamma = zeros(size(Ca_sel));
@@ -379,10 +342,6 @@ else
         
         if (Ca_sel(idx)) > -180 &&  (Ca_sel(idx)) < 180
             % ---- CALCULATE TEMPERATURE FROM IDEAL GAS LAW ----
-            p_smooth(idx)
-            V_sel(idx)
-            m_current
-            R_current
             T(idx) = (p_smooth(idx) * V_sel(idx)) / (m_current * R_current);  % [K]
         else
             T(idx) = T_intake;
@@ -400,18 +359,6 @@ else
         gamma(idx) = cp / cv;
         
     end
-    
-    fprintf('\nPost-fix diagnostics:\n');
-    fprintf('  n_C_fuel = %.6e mol, n_H_fuel = %.6e mol\n', n_C_fuel, n_H_fuel);
-    fprintf('  O2_consumed = %.6e mol\n', O2_consumed);
-    fprintf('  CO2_produced = %.6e mol, H2O_produced = %.6e mol\n', CO2_produced, H2O_produced);
-    fprintf('  Min T (pre-scan) = %.1f K (%.1f C)\n', min(T), min(T)-273.15);
-    fprintf('  Max T = %.1f K (%.1f C)\n', max(T), max(T)-273.15);
-    
-    fprintf('\nTemperature range:\n');
-    fprintf('  Min: %.1f K (%.1f C)\n', min(T), min(T)-273.15);
-    fprintf('  Max: %.1f K (%.1f C)\n', max(T), max(T)-273.15);
-    fprintf('=========================================\n\n');
     
     % 6. Calculate ROHR with variable gamma
     ROHR = gamma./(gamma-1) .* p_smooth .* dV_dtheta + ...
