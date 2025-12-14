@@ -3,16 +3,18 @@ clear; clc;
 % ============================================================
 % Load emission data from CSV files (new format)
 % ============================================================
-diesel_results = readtable('Diesel_g_per_MJ.csv');
-hvo_results    = readtable('HVO_g_per_MJ.csv');
-gtl_results    = readtable('GTL_g_per_MJ.csv');
+diesel_results = readtable('Results\Diesel_g_per_MJ.csv');
+hvo_results    = readtable('Results\HVO_g_per_MJ.csv');
+gtl_results    = readtable('Results\GTL_g_per_MJ.csv');
+dieselhvo_results = readtable('Results\HVO_Diesel_g_per_MJ.csv');
+dieselgtl_results = readtable('Results\GTL_Diesel_g_per_MJ.csv');
 
 % ============================================================
 % Define IMEP values, crank angles, fuel names
 % ============================================================
 IMEP_values   = [1.5, 2.5, 3.5];    % bar
 crank_angles  = [12, 15, 18];       % deg
-fuel_names    = {'Diesel', 'HVO', 'GTL'};
+fuel_names    = {'Diesel', 'HVO', 'GTL', 'Diesel\HVO blend', 'Diesel\GTL blend'};
 
 % ============================================================
 % Build matrices with correct row order:
@@ -20,7 +22,7 @@ fuel_names    = {'Diesel', 'HVO', 'GTL'};
 % [CA12,CA15,CA18] at IMEP=2.5,
 % [CA12,CA15,CA18] at IMEP=3.5
 % ============================================================
-fuelTables = {diesel_results, hvo_results, gtl_results};
+fuelTables = {diesel_results, hvo_results, gtl_results, dieselhvo_results, dieselgtl_results};
 
 GHG_100 = buildFuelMatrix(fuelTables, ...
     'BS_GHG100_gCO2eq_per_kWh', IMEP_values, crank_angles);
@@ -41,6 +43,9 @@ colors = [
     0.74 0.84 0.66;   % Diesel   - sage green
     0.78 0.63 0.86;   % HVO      - lilac
     0.80 0.33 0.00    % GTL      - burnt orange
+    0.25 0.55 0.75;   % muted steel blue
+0.90 0.75 0.30;   % warm mustard yellow
+
 ];
 
 line_styles = {'-', '--', ':'};  % IMEP 1.5, 2.5, 3.5
@@ -135,24 +140,6 @@ end
 % Your existing plotFuelImeps function (unchanged)
 % ======================================================================
 function plotFuelImeps(crank_angles, Y, fuel_names, imep_vals, line_styles, colors, yLabel, plotTitle)
-% plotFuelImeps
-%   Plots a matrix of emission data (or any quantity) versus crank angle
-%   for multiple fuels (colors) and multiple IMEPs (line styles).
-%
-% INPUTS:
-%   crank_angles : [nAngles x 1] vector of crank angles (e.g. [12 15 18])
-%   Y            : [nAngles*nImeps x nFuels] matrix.
-%                  For each fuel (column), rows are grouped as:
-%                  IMEP1: all crank angles
-%                  IMEP2: all crank angles
-%                  IMEP3: all crank angles
-%
-%   fuel_names   : 1 x nFuels cell array of fuel names (e.g. {'Diesel','HVO','GTL'})
-%   imep_vals    : 1 x nImeps vector of IMEP values (e.g. [1.5 2.5 3.5])
-%   line_styles  : 1 x nImeps cell array of line styles (e.g. {'-','--',':'})
-%   colors       : nFuels x 3 matrix of RGB colors for each fuel
-%   yLabel       : (optional) string for y-axis label
-%   plotTitle    : (optional) string for title
 
     % ------------------- Basic size checks -------------------
     if nargin < 3 || isempty(fuel_names)
@@ -163,9 +150,8 @@ function plotFuelImeps(crank_angles, Y, fuel_names, imep_vals, line_styles, colo
     nAngles = numel(crank_angles);
 
     if nargin < 4 || isempty(imep_vals)
-        % Infer IMEP count from size of Y
         nImeps = size(Y, 1) / nAngles;
-        imep_vals = 1:nImeps;  % generic labels if not given
+        imep_vals = 1:nImeps;
     else
         nImeps = numel(imep_vals);
     end
@@ -175,72 +161,72 @@ function plotFuelImeps(crank_angles, Y, fuel_names, imep_vals, line_styles, colo
     end
 
     if nargin < 6 || isempty(colors)
-        colors = lines(nFuels); % default MATLAB colormap
+        colors = lines(nFuels);
     end
 
-    % Sanity check on dimensions
-    assert(size(Y,1) == nAngles * nImeps, ...
-        'Y must have nAngles * nImeps rows.');
-    assert(numel(fuel_names) == nFuels, ...
-        'fuel_names length must match number of columns of Y.');
-    assert(size(colors,1) == nFuels && size(colors,2) == 3, ...
-        'colors must be nFuels x 3 RGB matrix.');
-    assert(numel(line_styles) == nImeps, ...
-        'line_styles length must match number of IMEP values.');
+    % Sanity checks
+    assert(size(Y,1) == nAngles * nImeps, 'Y must have nAngles * nImeps rows.');
+    assert(numel(fuel_names) == nFuels, 'fuel_names length must match number of columns of Y.');
+    assert(size(colors,1) == nFuels && size(colors,2) == 3, 'colors must be nFuels x 3 RGB matrix.');
+    assert(numel(line_styles) == nImeps, 'line_styles length must match number of IMEP values.');
 
-    % Make IMEP labels
+    % IMEP labels
     imep_labels = arrayfun(@(v) sprintf('IMEP = %.1f bar', v), ...
                            imep_vals, 'UniformOutput', false);
 
-    % ------------------- Actual plotting -------------------
+    % ------------------- Plot -------------------
     figure;
-    hold on; grid on;
+    ax = axes; %#ok<LAXES>
+    hold(ax, 'on'); grid(ax, 'on');
 
-    % Plot all real data (hidden from legend)
-    for j = 1:nFuels          % loop over fuels (columns)
-        for i = 1:nImeps      % loop over IMEPs (blocks in rows)
+    % Plot real data (hidden from legend)
+    for j = 1:nFuels
+        for i = 1:nImeps
             idx_start = (i-1)*nAngles + 1;
             idx_end   =  i   *nAngles;
 
-            plot(crank_angles, ...
-                 Y(idx_start:idx_end, j), ...
+            plot(ax, crank_angles, Y(idx_start:idx_end, j), ...
                  'LineStyle',       line_styles{i}, ...
                  'Color',           colors(j,:), ...
                  'Marker',          '.', ...
                  'MarkerSize',      15, ...
-                 'HandleVisibility','off'); % hide from legend
+                 'HandleVisibility','off');
         end
     end
 
-    % --- Fuel legend entries (color) ---
+    % --- Create dummy handles for legend (fuel colors) ---
+    hFuel = gobjects(nFuels,1);
     for j = 1:nFuels
-        plot(NaN, NaN, '-', ...
-             'Color',      colors(j,:), ...
-             'LineWidth',  1.5, ...
-             'DisplayName', fuel_names{j});
+        hFuel(j) = plot(ax, NaN, NaN, '-', ...
+            'Color', colors(j,:), ...
+            'LineWidth', 2);
     end
 
-    % --- IMEP legend entries (line styles) ---
+    % --- Create dummy handles for legend (IMEP line styles) ---
+    hImeps = gobjects(nImeps,1);
     for i = 1:nImeps
-        plot(NaN, NaN, line_styles{i}, ...
-             'Color',      'k', ...        % only style matters here
-             'LineWidth',  1.5, ...
-             'DisplayName', imep_labels{i});
+        hImeps(i) = plot(ax, NaN, NaN, line_styles{i}, ...
+            'Color', 'k', ...
+            'LineWidth', 2);
     end
 
-    legend('show', 'Location', 'bestoutside');
+    % Combined legend, but clean layout + NO TeX parsing (fixes backslashes)
+    lgd = legend(ax, [hFuel; hImeps], [fuel_names(:); imep_labels(:)], ...
+        'Location', 'bestoutside', ...
+        'Interpreter', 'none', ...
+        'NumColumns', 2);
+    lgd.Title.String = "Fuel (color)  |  IMEP (line style)";
 
-    % Labels and title
-    xlabel('Crank Angle (°)');
+    xlabel(ax, 'Crank Angle (°)');
     if nargin >= 7 && ~isempty(yLabel)
-        ylabel(yLabel);
+        ylabel(ax, yLabel);
     else
-        ylabel('Quantity (units)');
+        ylabel(ax, 'Quantity (units)');
     end
 
     if nargin >= 8 && ~isempty(plotTitle)
-        title(plotTitle);
+        title(ax, plotTitle);
     end
 
-    hold off;
+    hold(ax, 'off');
 end
