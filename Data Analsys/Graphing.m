@@ -32,15 +32,15 @@ Mi = [SpS.Mass];            % Molar masses [kg/mol]
 %% ===============================================================
 
 % Import emission data
-fdaq_file = fullfile('Data','20251120_0000001_example_fdaq.txt'); % fast data file
-sdaq_file = fullfile('Data','20251120_0000001_example_sdaq.txt'); % slow data file
+fdaq_file = fullfile('Data\Diesel','20251125_0000006_CA15_IMEP2.5_fdaq.txt'); % fast data file
+sdaq_file = fullfile('Data\Diesel','20251125_0000006_CA15_IMEP2.5_sdaq.txt'); % slow data file
 csv_file = fullfile('Data', 'Diesel_emissions.csv');              % emissions file
 emission_data = readtable(csv_file);
 
 % User inputs for selection
 CA_value = 12;      % [deg] Combustion advance (12, 15, or 18)
 IMEP_value = 1.5;   % [bar] IMEP (1.5, 2.5, or 3.5)
-use_variable_gamma = true; % can switch of variable vs non variable gamma
+use_variable_gamma = false; % can switch of variable vs non variable gamma
 
 % Static parameters (not in CSV)
 AFR_stoich = 14.5;       % [-] stoich AFR for diesel
@@ -235,165 +235,185 @@ fprintf('IMEP (from p-V): %.2f bar\n', IMEP/bara);
 
 %% =============================================================
 % ROHR (using smoothed pressure)
-gamma  = 1.33;                               % constant gamma
+gamma  = 1.35;                               % constant gamma
 dtheta = deg2rad(mean(diff(Ca_sel)));        % [rad/step]
     
 dp_dtheta = gradient(p_smooth, dtheta);      % [Pa/rad]
 dV_dtheta = gradient(V_sel    , dtheta);     % [m^3/rad]
 
-if use_variable_gamma == false
-  
-    ROHR = (gamma/(gamma-1))*p_smooth.*dV_dtheta + ...
+
+ROHRnonvar = (gamma/(gamma-1))*p_smooth.*dV_dtheta + ...
            (1/(gamma-1))*V_sel.*dp_dtheta;       % [J/rad]
     
-    % Convert to J/deg:
-    ROHR_deg = ROHR * (pi/180);                  % [J/deg]
-else
+% Convert to J/deg:
+ROHR_degnonvar = ROHRnonvar * (pi/180);                  % [J/deg]
 
-    %% =============================================================
-    % VARIABLE GAMMA ROHR CALCULATION
-    %% =============================================================
-    
-    % 1. Initial conditions
-    T_intake = mean(Tint) + 273.15;  % [K]
-    
-    % --- PRE-COMBUSTION MIXTURE (fresh charge) ---
-    % Calculate mass of fresh charge per cycle
-    cycles_per_sec = n_test / 120;
-    mfuelinj = mfuel_mean / cycles_per_sec;  % [kg/cycle]
-    
-    
-    M_mean = MAir; 
-    R_mixpre = (Runiv / MAir);   % [J/(kg·K)]
-    
-    P_ivc = p_ref;          % intake pressure
-    T_ivc = T_intake;     % intake temperature
-    V_ivc = CylinderVolume(-180, Cyl);
-    m_trapped = (P_ivc * V_ivc) / (R_mixpre * T_ivc);
-    Ttest = (P_ivc * V_ivc) / (m_trapped * R_mixpre );
-    % Calculate total moles of air
-    n_air_total = m_trapped / MAir;  % [mol] (MAir in g/mol -> kg/mol)
-    
-    % --- FUEL ELEMENTAL ANALYSIS ---
-    m_C_fuel = mfuelinj * FuelWeightPercent.C;
-    m_H_fuel = mfuelinj * FuelWeightPercent.H;
-    m_O_fuel = mfuelinj * FuelWeightPercent.O;
-    n_C_fuel = m_C_fuel / M_atom.C;
-    n_H_fuel = m_H_fuel / M_atom.H;
-    n_O_fuel = m_O_fuel / M_atom.O;
-    
-    % --- STOICHIOMETRIC COMBUSTION ---
-    O2_for_C = n_C_fuel;
-    O2_for_H = n_H_fuel / 4;
-    O2_from_fuel = n_O_fuel / 2;
-    O2_consumed = O2_for_C + O2_for_H - O2_from_fuel;
-    CO2_produced = n_C_fuel;
-    H2O_produced = n_H_fuel / 2;
-    
-    % --- POST-COMBUSTION MIXTURE ---
-    m_species = Yair * m_trapped;
-    n_species = m_species ./ Mi;
-    n_post = n_species;      % start with air composition
-    n_post(1) = 0;           % no diesel vapor — already included in mfuelinj
-    n_post(2) = n_post(2) - O2_consumed;
-    n_post(4) = n_post(4) + CO2_produced;
-    n_post(5) = n_post(5) + H2O_produced;
-    
-    % Mass fractions of combustion products
-    m_post = n_post .* Mi;
-    Ypost = m_post / sum(m_post);
-    M_mean_post = sum(n_post.*Mi) / sum(n_post);   % molar mass in kg/mol
-    R_mixpost = Runiv / M_mean_post;
-    
-    % Calculate total mass in cylinder per cycle
-    m_total_pre = m_trapped;                     % Before combustion
-    m_total_post = m_trapped + mfuelinj;         % After combustion (includes fuel)
-    
-    % Calculate variable gamma and temperature at each crank angle
-    gamma = zeros(size(Ca_sel));
-    T = zeros(size(Ca_sel));
-    Cpi = zeros(1, NSp);
-    Cvi = zeros(1, NSp);
-    
-    for idx = 1:length(Ca_sel)
-        % ---- DETERMINE COMPOSITION AT THIS CRANK ANGLE ----
-        if Ca_sel(idx) < 0
-            % Before combustion: fresh charge
-            Y_current = Yair;
-            R_current = R_mixpre;
-            m_current = m_total_pre;
-            
-        else
-            % After combustion: fully burned products
-            Y_current = Ypost;
-            R_current = R_mixpost;
-            m_current = m_total_post;
-        end
-        
-        if (Ca_sel(idx)) > -180 &&  (Ca_sel(idx)) < 180
-            % ---- CALCULATE TEMPERATURE FROM IDEAL GAS LAW ----
-            T(idx) = (p_smooth(idx) * V_sel(idx)) / (m_current * R_current);  % [K]
-        else
-            T(idx) = T_intake;
-        end
-        % Convert species Cp, Cv (molar) to mass-based values:
-        for i = 1:NSp
-            Cp_mass(i) = CpNasa(T(idx), SpS(i)) / Mi(i);  % J/kg/K
-            Cv_mass(i) = CvNasa(T(idx), SpS(i)) / Mi(i);  % J/kg/K
-        end
-        
-        % mass-fraction weighted mixture properties
-        cp = Y_current * Cp_mass';
-        cv = Y_current * Cv_mass';
-        
-        gamma(idx) = cp / cv;
-        
+
+%% =============================================================
+% VARIABLE GAMMA ROHR CALCULATION
+%% =============================================================
+
+% 1. Initial conditions
+T_intake = mean(Tint) + 273.15;  % [K]
+
+% --- PRE-COMBUSTION MIXTURE (fresh charge) ---
+% Calculate mass of fresh charge per cycle
+cycles_per_sec = n_test / 120;
+mfuelinj = mfuel_mean / cycles_per_sec;  % [kg/cycle]
+
+
+M_mean = MAir;
+R_mixpre = (Runiv / MAir);   % [J/(kg·K)]
+
+P_ivc = p_ref;          % intake pressure
+T_ivc = T_intake;     % intake temperature
+V_ivc = CylinderVolume(-180, Cyl);
+m_trapped = (P_ivc * V_ivc) / (R_mixpre * T_ivc);
+Ttest = (P_ivc * V_ivc) / (m_trapped * R_mixpre );
+% Calculate total moles of air
+n_air_total = m_trapped / MAir;  % [mol] (MAir in g/mol -> kg/mol)
+
+% --- FUEL ELEMENTAL ANALYSIS ---
+m_C_fuel = mfuelinj * FuelWeightPercent.C;
+m_H_fuel = mfuelinj * FuelWeightPercent.H;
+m_O_fuel = mfuelinj * FuelWeightPercent.O;
+n_C_fuel = m_C_fuel / M_atom.C;
+n_H_fuel = m_H_fuel / M_atom.H;
+n_O_fuel = m_O_fuel / M_atom.O;
+
+% --- STOICHIOMETRIC COMBUSTION ---
+O2_for_C = n_C_fuel;
+O2_for_H = n_H_fuel / 4;
+O2_from_fuel = n_O_fuel / 2;
+O2_consumed = O2_for_C + O2_for_H - O2_from_fuel;
+CO2_produced = n_C_fuel;
+H2O_produced = n_H_fuel / 2;
+
+% --- POST-COMBUSTION MIXTURE ---
+m_species = Yair * m_trapped;
+n_species = m_species ./ Mi;
+n_post = n_species;      % start with air composition
+n_post(1) = 0;           % no diesel vapor — already included in mfuelinj
+n_post(2) = n_post(2) - O2_consumed;
+n_post(4) = n_post(4) + CO2_produced;
+n_post(5) = n_post(5) + H2O_produced;
+
+% Mass fractions of combustion products
+m_post = n_post .* Mi;
+Ypost = m_post / sum(m_post);
+M_mean_post = sum(n_post.*Mi) / sum(n_post);   % molar mass in kg/mol
+R_mixpost = Runiv / M_mean_post;
+
+% Calculate total mass in cylinder per cycle
+m_total_pre = m_trapped;                     % Before combustion
+m_total_post = m_trapped + mfuelinj;         % After combustion (includes fuel)
+
+% Calculate variable gamma and temperature at each crank angle
+gamma = zeros(size(Ca_sel));
+T = zeros(size(Ca_sel));
+Cpi = zeros(1, NSp);
+Cvi = zeros(1, NSp);
+
+for idx = 1:length(Ca_sel)
+    % ---- DETERMINE COMPOSITION AT THIS CRANK ANGLE ----
+    if Ca_sel(idx) < 0
+        % Before combustion: fresh charge
+        Y_current = Yair;
+        R_current = R_mixpre;
+        m_current = m_total_pre;
+
+    else
+        % After combustion: fully burned products
+        Y_current = Ypost;
+        R_current = R_mixpost;
+        m_current = m_total_post;
     end
-    
-    % 6. Calculate ROHR with variable gamma
-    ROHR = gamma./(gamma-1) .* p_smooth .* dV_dtheta + ...
-           1./(gamma-1) .* V_sel .* dp_dtheta;
-    
-    % 7. Convert to J/deg and continue with existing analysis
-    ROHR_deg = ROHR * (pi/180);
-    
-    %gamma diagnosis
 
-    gamma_min = min(gamma);
-    gamma_max = max(gamma);
-    
-    gamma_delta = gamma_max - gamma_min
-    
-    % Plot variable gamma for diagnostics
-    figure;
-    subplot(2,1,1)
-    plot(Ca_sel, gamma, 'LineWidth', 1.5);
-    xlabel('Crank angle [deg]');
-    ylabel('Gamma [-]');
-    title('Variable Gamma vs Crank Angle');
-    grid on;
-    yline(1.33, '--r', 'Constant \gamma = 1.33');
-    legend('Variable \gamma', 'Constant \gamma');
-    
-    subplot(2,1,2)
-    plot(Ca_sel, T - 273.15, 'LineWidth', 1.5);
-    xlabel('Crank angle [deg]');
-    ylabel('Temperature [°C]');
-    title('In-Cylinder Temperature vs Crank Angle');
-    grid on;
+    if (Ca_sel(idx)) > -180 &&  (Ca_sel(idx)) < 180
+        % ---- CALCULATE TEMPERATURE FROM IDEAL GAS LAW ----
+        T(idx) = (p_smooth(idx) * V_sel(idx)) / (m_current * R_current);  % [K]
+    else
+        T(idx) = T_intake;
+    end
+    % Convert species Cp, Cv (molar) to mass-based values:
+    for i = 1:NSp
+        Cp_mass(i) = CpNasa(T(idx), SpS(i)) / Mi(i);  % J/kg/K
+        Cv_mass(i) = CvNasa(T(idx), SpS(i)) / Mi(i);  % J/kg/K
+    end
+
+    % mass-fraction weighted mixture properties
+    cp = Y_current * Cp_mass';
+    cv = Y_current * Cv_mass';
+
+    gamma(idx) = cp / cv;
+
 end
 
-% Continue with existing combustion window analysis
-Ca_c = Ca_sel(comb_mask);
-ROHR_c = ROHR_deg(comb_mask);
-ROHR_smooth = sgolayfilt(ROHR_c, 3, 31);
+% 6. Calculate ROHR with variable gamma
+ROHRvar = gamma./(gamma-1) .* p_smooth .* dV_dtheta + ...
+    1./(gamma-1) .* V_sel .* dp_dtheta;
 
+% 7. Convert to J/deg and continue with existing analysis
+ROHR_degvar = ROHRvar * (pi/180);
+
+%gamma diagnosis
+
+gamma_min = min(gamma);
+gamma_max = max(gamma);
+
+gamma_delta = gamma_max - gamma_min;
+
+
+
+% Plot variable gamma for diagnostics
 figure;
-plot(Ca_c, ROHR_smooth,'LineWidth',1.7);
+subplot(2,1,1)
+plot(Ca_sel, gamma, 'LineWidth', 1.5);
+xlabel('Crank angle [deg]');
+ylabel('Gamma [-]');
+title('Variable Gamma vs Crank Angle');
+grid on;
+yline(1.33, '--r', 'Constant \gamma = 1.33');
+legend('Variable \gamma', 'Constant \gamma');
+
+subplot(2,1,2)
+plot(Ca_sel, T - 273.15, 'LineWidth', 1.5);
+xlabel('Crank angle [deg]');
+ylabel('Temperature [°C]');
+title('In-Cylinder Temperature vs Crank Angle');
+grid on;
+
+% Plot both variable and non-variable ROHR for comparison
+comb_mask   = (Ca_sel >= -40) & (Ca_sel <= 120);
+Ca_c = Ca_sel(comb_mask);
+
+% Get both ROHR versions for the combustion window
+ROHR_var_c = ROHR_degvar(comb_mask);
+ROHR_nonvar_c = ROHR_degnonvar(comb_mask);
+
+% Smooth both versions
+ROHR_var_smooth = sgolayfilt(ROHR_var_c, 3, 31);
+ROHR_nonvar_smooth = sgolayfilt(ROHR_nonvar_c, 3, 31);
+
+% Create figure with both plots
+figure;
+plot(Ca_c, ROHR_var_smooth, 'LineWidth', 1.7, 'DisplayName', 'Variable γ');
+hold on;
+plot(Ca_c, ROHR_nonvar_smooth, 'LineWidth', 1.7, 'DisplayName', 'Constant γ');
+hold off;
+
 xlabel('Crank angle [deg]');
 ylabel('ROHR [J/deg]');
 title('Corrected Smoothed Rate of Heat Release');
+legend('Location', 'best');
 grid on;
+
+% Select which one to use for further analysis based on flag
+if use_variable_gamma == true
+    ROHR_smooth = ROHR_var_smooth; % Use variable gamma for ROHR calculation
+else
+    ROHR_smooth = ROHR_nonvar_smooth;  % Use constant gamma for ROHR calculation
+end
 
 %% =============================================================
 % CUMULATIVE HEAT RELEASE + CA10/50/90
@@ -477,34 +497,38 @@ title('Smoothed p–V (Log-Log)');
 grid on;
 
 figure;
-plot(Ca_sel, p_smooth/bara,'LineWidth',1.8);
+plot(Ca_sel, p_sel/bara,'LineWidth',1,'DisplayName', 'Raw pressure');
+hold on
+plot(Ca_sel, p_smooth/bara,'LineWidth',1.8, 'DisplayName', 'Filtered pressure');
+hold off
 xlabel('Crank angle [deg]');
 ylabel('Pressure [bar]');
 title('Smoothed p–CA Diagram');
+legend('Location', 'best');
 grid on;
 
-%% =============================================================
-% ======= PERFORMANCE KPIs (IMEP CALCULATED FROM DATA) =======
-
-
-cycles_per_sec = n_test / 120;  % 4-stroke: n/120
-
-% Indicated power from THIS measured IMEP
-P_i = W_ind * cycles_per_sec;   % [W]
-
-% Fuel energy input 
-E_fuel = mfuel_mean * LHV;      % [W]
-
-% Efficiencies & BSFC at this operating point
-ITE  = P_i / E_fuel;                 % indicated thermal efficiency
-BSFC = (mfuel_mean / P_i) * 3.6e9;   % [g/kWh]
-
-fprintf('\n========== PERFORMANCE KPIs (from calculated IMEP) ==========\n');
-fprintf('IMEP (calculated)   = %6.2f bar\n', IMEP/bara);
-fprintf('Indicated power P_i = %6.2f kW\n', P_i/1e3);
-fprintf('Fuel power E_fuel   = %6.2f kW\n', E_fuel/1e3);
-fprintf('ITE                 = %6.3f [-]\n', ITE);
-fprintf('BSFC                = %6.1f g/kWh\n', BSFC);
+% %% =============================================================
+% % ======= PERFORMANCE KPIs (IMEP CALCULATED FROM DATA) =======
+% 
+% 
+% cycles_per_sec = n_test / 120;  % 4-stroke: n/120
+% 
+% % Indicated power from THIS measured IMEP
+% P_i = W_ind * cycles_per_sec;   % [W]
+% 
+% % Fuel energy input 
+% E_fuel = mfuel_mean * LHV;      % [W]
+% 
+% % Efficiencies & BSFC at this operating point
+% ITE  = P_i / E_fuel;                 % indicated thermal efficiency
+% BSFC = (mfuel_mean / P_i) * 3.6e9;   % [g/kWh]
+% 
+% fprintf('\n========== PERFORMANCE KPIs (from calculated IMEP) ==========\n');
+% fprintf('IMEP (calculated)   = %6.2f bar\n', IMEP/bara);
+% fprintf('Indicated power P_i = %6.2f kW\n', P_i/1e3);
+% fprintf('Fuel power E_fuel   = %6.2f kW\n', E_fuel/1e3);
+% fprintf('ITE                 = %6.3f [-]\n', ITE);
+% fprintf('BSFC                = %6.1f g/kWh\n', BSFC);
 
 
 
@@ -534,79 +558,79 @@ ylabel('Pressure [bar]');
 title('Intake Pressure (slow sensor)');
 grid on;
 
-%% =============================================================
-%  EMISSIONS KPIs  (single operating point / single load)
-%% =============================================================
-
-% ====== 2. CONSTANTS & BASIC ASSUMPTIONS ======
-M_exhaust    = 29e-3;      % [kg/mol] approx. exhaust molar mass
-M_CO2        = 44.01e-3;   % [kg/mol]
-M_CO         = 28.01e-3;   % [kg/mol]
-M_HC         = 44.1e-3;    % [kg/mol] Propane equivalent
-M_NOx        = 46.0e-3;    % [kg/mol] NO2-equivalent
-V_molar_STP  = 22.414e-3;  % [m^3/mol] molar volume at STP
-Texh_mean_K  = Texh_mean_C + 273.15;  % [K]
-GWP20_CH4    = 79;         % GWP values
-GWP100_CH4   = 27.2;       % GWP values
-
-% Temperature correction factor (STP -> exhaust conditions)
-T_correction = 273.15 / Texh_mean_K;
-
-% ====== 3. AIR & EXHAUST MASS FLOWS ======
-m_air     = mfuel_mean * lambda * AFR_stoich;   % [kg/s]
-m_exhaust = m_air + mfuel_mean;                 % [kg/s]
-
-% Exhaust density and volumetric flow
-R_univ      = 8.314;                                     % [J/mol/K]
-rho_exhaust = p_ref * M_exhaust / (R_univ * Texh_mean_K);% [kg/m^3]
-V_exhaust   = m_exhaust / rho_exhaust;                   % [m^3/s]
-C_soot_mg_m3 = (4.95/0.405) * FSN * exp(0.38 * FSN);
-
-
-% ====== 4. EMISSION MASS FLOWS (from analyser readings) ======
-mass_CO  = (CO_vol  / 100) * V_exhaust * (M_CO  / V_molar_STP) * T_correction;   % [kg/s]
-mass_CO2 = (CO2_vol / 100) * V_exhaust * (M_CO2 / V_molar_STP) * T_correction;   % [kg/s]
-mass_HC  = (HC_vol / 100) * V_exhaust * (M_HC / V_molar_STP) * T_correction;     % [kg/s]
-mass_NOx = (NOx_ppm / 1e6) * V_exhaust * (M_NOx / V_molar_STP) * T_correction;   % [kg/s]
-mass_soot = C_soot_mg_m3 * V_exhaust;
-norm_nox = mass_NOx * ((21-15)/21 - O2_vol);
-
-
-% ====== 5. GHG-20 & DHD 100 calculations ======
-CO2eq_from_CO = mass_CO * (M_CO2 / M_CO);
-GHG20 = mass_CO2 + CO2eq_from_CO + mass_HC * GWP20_CH4;
-GHG100 = mass_CO2 + CO2eq_from_CO + mass_HC * GWP100_CH4;
-
-% ====== 5. BRAKE-SPECIFIC EMISSIONS (per kWh) ======
-BSCO2 = (mass_CO2 / P_i) * 3.6e9;   % [g/kWh]
-BSCO2nonren = (mass_CO2*nonrenfactor / P_i) * 3.6e9;   % [g/kWh]
-BSCO  = (mass_CO  / P_i) * 3.6e9;   % [g/kWh]
-BSNOx = (mass_NOx / P_i) * 3.6e9;   % [g/kWh]
-BSGHG20 = (GHG20 / P_i) * 3.6e9;    % [g/kWh]
-BSGHG100 = (GHG100 / P_i) * 3.6e9;  % [g/kWh]
-BSSOOT = (mass_soot / P_i) * 3.6e6; % [mg/kWh]
-
-
-fprintf('\n========== EMISSIONS KPIs ==========\n');
-fprintf('Air mass flow       = %8.4f kg/s\n', m_air);
-fprintf('Exhaust mass flow   = %8.4f kg/s\n', m_exhaust);
-fprintf('Lambda              = %8.3f [-]\n', lambda);
-fprintf('N NOx               = %8.3f kg/s\n', norm_nox);
-fprintf('\nEmission mass flows:\n');
-fprintf('  CO2               = %8.5f kg/s\n', mass_CO2);
-fprintf('  CO                = %8.5f kg/s\n', mass_CO);
-fprintf('  HC                = %8.5f kg/s\n', mass_HC);
-fprintf('  NOx               = %8.5f kg/s\n', mass_NOx);
-fprintf('  GHG20             = %8.5f kg/s\n', GHG20);
-fprintf('  GHG100            = %8.5f kg/s\n', GHG100);
-fprintf('\nBrake-specific emissions:\n');
-fprintf('  BSCO2             = %8.1f g/kWh\n', BSCO2);
-fprintf('  BSCO2nonren       = %8.1f g/kWh\n', BSCO2);
-fprintf('  BSCO              = %8.2f g/kWh\n', BSCO);
-fprintf('  BSNOx             = %8.2f g/kWh\n', BSNOx);
-fprintf('  BSGHG20           = %8.2f g/kWh\n', BSGHG20);
-fprintf('  BSGHG100          = %8.2f g/kWh\n', BSGHG100);
-fprintf('  BSSOOT            = %8.2f mg/kWh\n', BSSOOT);
+% %% =============================================================
+% %  EMISSIONS KPIs  (single operating point / single load)
+% %% =============================================================
+% 
+% % ====== 2. CONSTANTS & BASIC ASSUMPTIONS ======
+% M_exhaust    = 29e-3;      % [kg/mol] approx. exhaust molar mass
+% M_CO2        = 44.01e-3;   % [kg/mol]
+% M_CO         = 28.01e-3;   % [kg/mol]
+% M_HC         = 44.1e-3;    % [kg/mol] Propane equivalent
+% M_NOx        = 46.0e-3;    % [kg/mol] NO2-equivalent
+% V_molar_STP  = 22.414e-3;  % [m^3/mol] molar volume at STP
+% Texh_mean_K  = Texh_mean_C + 273.15;  % [K]
+% GWP20_CH4    = 79;         % GWP values
+% GWP100_CH4   = 27.2;       % GWP values
+% 
+% % Temperature correction factor (STP -> exhaust conditions)
+% T_correction = 273.15 / Texh_mean_K;
+% 
+% % ====== 3. AIR & EXHAUST MASS FLOWS ======
+% m_air     = mfuel_mean * lambda * AFR_stoich;   % [kg/s]
+% m_exhaust = m_air + mfuel_mean;                 % [kg/s]
+% 
+% % Exhaust density and volumetric flow
+% R_univ      = 8.314;                                     % [J/mol/K]
+% rho_exhaust = p_ref * M_exhaust / (R_univ * Texh_mean_K);% [kg/m^3]
+% V_exhaust   = m_exhaust / rho_exhaust;                   % [m^3/s]
+% C_soot_mg_m3 = (4.95/0.405) * FSN * exp(0.38 * FSN);
+% 
+% 
+% % ====== 4. EMISSION MASS FLOWS (from analyser readings) ======
+% mass_CO  = (CO_vol  / 100) * V_exhaust * (M_CO  / V_molar_STP) * T_correction;   % [kg/s]
+% mass_CO2 = (CO2_vol / 100) * V_exhaust * (M_CO2 / V_molar_STP) * T_correction;   % [kg/s]
+% mass_HC  = (HC_vol / 100) * V_exhaust * (M_HC / V_molar_STP) * T_correction;     % [kg/s]
+% mass_NOx = (NOx_ppm / 1e6) * V_exhaust * (M_NOx / V_molar_STP) * T_correction;   % [kg/s]
+% mass_soot = C_soot_mg_m3 * V_exhaust;
+% norm_nox = mass_NOx * ((21-15)/21 - O2_vol);
+% 
+% 
+% % ====== 5. GHG-20 & DHD 100 calculations ======
+% CO2eq_from_CO = mass_CO * (M_CO2 / M_CO);
+% GHG20 = mass_CO2 + CO2eq_from_CO + mass_HC * GWP20_CH4;
+% GHG100 = mass_CO2 + CO2eq_from_CO + mass_HC * GWP100_CH4;
+% 
+% % ====== 5. BRAKE-SPECIFIC EMISSIONS (per kWh) ======
+% BSCO2 = (mass_CO2 / P_i) * 3.6e9;   % [g/kWh]
+% BSCO2nonren = (mass_CO2*nonrenfactor / P_i) * 3.6e9;   % [g/kWh]
+% BSCO  = (mass_CO  / P_i) * 3.6e9;   % [g/kWh]
+% BSNOx = (mass_NOx / P_i) * 3.6e9;   % [g/kWh]
+% BSGHG20 = (GHG20 / P_i) * 3.6e9;    % [g/kWh]
+% BSGHG100 = (GHG100 / P_i) * 3.6e9;  % [g/kWh]
+% BSSOOT = (mass_soot / P_i) * 3.6e6; % [mg/kWh]
+% 
+% 
+% fprintf('\n========== EMISSIONS KPIs ==========\n');
+% fprintf('Air mass flow       = %8.4f kg/s\n', m_air);
+% fprintf('Exhaust mass flow   = %8.4f kg/s\n', m_exhaust);
+% fprintf('Lambda              = %8.3f [-]\n', lambda);
+% fprintf('N NOx               = %8.3f kg/s\n', norm_nox);
+% fprintf('\nEmission mass flows:\n');
+% fprintf('  CO2               = %8.5f kg/s\n', mass_CO2);
+% fprintf('  CO                = %8.5f kg/s\n', mass_CO);
+% fprintf('  HC                = %8.5f kg/s\n', mass_HC);
+% fprintf('  NOx               = %8.5f kg/s\n', mass_NOx);
+% fprintf('  GHG20             = %8.5f kg/s\n', GHG20);
+% fprintf('  GHG100            = %8.5f kg/s\n', GHG100);
+% fprintf('\nBrake-specific emissions:\n');
+% fprintf('  BSCO2             = %8.1f g/kWh\n', BSCO2);
+% fprintf('  BSCO2nonren       = %8.1f g/kWh\n', BSCO2);
+% fprintf('  BSCO              = %8.2f g/kWh\n', BSCO);
+% fprintf('  BSNOx             = %8.2f g/kWh\n', BSNOx);
+% fprintf('  BSGHG20           = %8.2f g/kWh\n', BSGHG20);
+% fprintf('  BSGHG100          = %8.2f g/kWh\n', BSGHG100);
+% fprintf('  BSSOOT            = %8.2f mg/kWh\n', BSSOOT);
 
 %% =============================================================
 % CYLINDER VOLUME FUNCTION
