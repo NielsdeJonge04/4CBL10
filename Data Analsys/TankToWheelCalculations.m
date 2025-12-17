@@ -5,7 +5,7 @@ clear; clc;
 
 use_lambda = false; %if true uses AFR and lambda to guess mass flow else pumped volume
 use_renewable = false; % If true it also accounts for the renewable CO2 emissions for the emissions
-use_aftertreatment = false; % If true the code accounts the aftertreatment in the emissions
+use_aftertreatment = true; % If true the code accounts the aftertreatment in the emissions
 
 eta_treat_nox = 0.85;
 eta_treat_soot = 0.95;
@@ -185,6 +185,9 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
     BS_soot_mg_per_kWh     = zeros(nOP,1);
     BSFC_g_per_kWh         = zeros(nOP,1);
     BS_NNOx_g_per_kWh      = zeros(nOP,1);
+    C_NNox_mg_m3           = zeros(nOP,1);
+    C_soot_mg_m3           = zeros(nOP,1);
+
 
     % GWP values (same as in single-point KPI script)
     GWP20_CH4  = 79;
@@ -323,10 +326,10 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         mdot_HC  = (x_HC  * M_HC  / M_exhaust_avg) * mdot_exhaust_total; % [kg/s]
         if use_aftertreatment == false
             mdot_NOx = (x_NOx * M_NOx / M_exhaust_avg) * mdot_exhaust_total; % [kg/s]
-            C_soot_mg_m3 = (4.95/0.405) * FSN * exp(0.38 * FSN);  % [mg/m^3]
+            C_soot_mg_m3(k) = (4.95/0.405) * FSN * exp(0.38 * FSN);  % [mg/m^3]
         else
             mdot_NOx = (x_NOx * M_NOx / M_exhaust_avg) * mdot_exhaust_total*(1-eta_treat_nox);
-            C_soot_mg_m3 = ((4.95/0.405) * FSN * exp(0.38 * FSN))*(1-eta_treat_soot);  % [mg/m^3]
+            C_soot_mg_m3(k) = ((4.95/0.405) * FSN * exp(0.38 * FSN))*(1-eta_treat_soot);  % [mg/m^3]
         end
 
         mdot_NNox = mdot_NOx * ((21-15)/(21 - O2_volpct));                
@@ -341,10 +344,10 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         % Soot from FSN  (AVL/ISO-like correlation)
         % --------------------------------------------------------     
         % Exhaust density & volume flow
-        mdot_soot_mg_s = C_soot_mg_m3 * V_exhaust;
-        EI_soot(k)     = (mdot_soot_mg_s / 1000) / Edot_MJ_s;  % [g/MJ]
+        mdot_soot_mg_s(k) = C_soot_mg_m3(k) * V_exhaust;
+        EI_soot(k)     = (mdot_soot_mg_s(k) / 1000) / Edot_MJ_s;  % [g/MJ]
         
-        C_NNox_mg_m3   = mdot_NNox / V_exhaust * 1e6;
+        C_NNox_mg_m3(k)   = mdot_NNox / V_exhaust * 1e6;
 
         % --------------------------------------------------------
         % GHG (gas-phase only) in g/MJ (same as before)
@@ -378,7 +381,7 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         mass_CO2  = mdot_CO2;
         mass_HC   = mdot_HC;
         mass_NOx  = mdot_NOx;
-        mass_soot = mdot_soot_mg_s;  % [mg/s]
+        mass_soot = mdot_soot_mg_s(k);  % [mg/s]
 
         % GHG mass flows [kg/s]
         GHG20_mass  = mass_CO2 + mass_CO*(M_CO2/M_CO) + mass_HC*GWP20_CH4;
