@@ -344,8 +344,8 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         % Soot from FSN  (AVL/ISO-like correlation)
         % --------------------------------------------------------     
         % Exhaust density & volume flow
-        mdot_soot_mg_s(k) = C_soot_mg_m3(k) * V_exhaust;
-        EI_soot(k)     = (mdot_soot_mg_s(k) / 1000) / Edot_MJ_s;  % [g/MJ]
+        mdot_soot_mg_s = C_soot_mg_m3(k) * V_exhaust;
+        EI_soot(k)     = (mdot_soot_mg_s / 1000) / Edot_MJ_s;  % [g/MJ]
         
         C_NNox_mg_m3(k)   = mdot_NNox / V_exhaust * 1e6;
 
@@ -381,7 +381,7 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         mass_CO2  = mdot_CO2;
         mass_HC   = mdot_HC;
         mass_NOx  = mdot_NOx;
-        mass_soot = mdot_soot_mg_s(k);  % [mg/s]
+        mass_soot = mdot_soot_mg_s;  % [mg/s]
 
         % GHG mass flows [kg/s]
         GHG20_mass  = mass_CO2 + mass_CO*(M_CO2/M_CO) + mass_HC*GWP20_CH4;
