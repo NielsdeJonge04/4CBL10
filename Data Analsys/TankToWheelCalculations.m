@@ -41,9 +41,9 @@ AFRst_GTL_diesel = 14.74;
 % Non-renewable carbon factors (0 = fully renewable, 1 = fossil)
 nonren_diesel      = 1.0;
 nonren_hvo         = 0.0;   % pure renewable (adjust if needed)
-nonren_GTL         = 1.0;
+nonren_GTL         = 0.0;   % assuming renewable source of carbon
 nonren_HVO_diesel  = 0.5;   % 50/50 blend example (adjust if needed)
-nonren_GTL_diesel = 1.0;
+nonren_GTL_diesel  = 0.5;
 
 % ============================================================
 % Engine & operating conditions for brake-specific metrics
@@ -308,8 +308,8 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         % Gas species mass flows [kg/s]
         % --------------------------------------------------------
 
-        mdot_CO  = (x_CO  * M_CO  / M_exhaust_avg) * mdot_exhaust_total; % [kg/s]
-        mdot_CO2 = (x_CO2 * M_CO2 / M_exhaust_avg) * mdot_exhaust_total; % [kg/s]
+        mdot_CO  = ((x_CO  * M_CO  / M_exhaust_avg) * mdot_exhaust_total)*nonren_factor; % [kg/s]
+        mdot_CO2 = ((x_CO2 * M_CO2 / M_exhaust_avg) * mdot_exhaust_total)*nonren_factor; % [kg/s]
         mdot_HC  = (x_HC  * M_HC  / M_exhaust_avg) * mdot_exhaust_total; % [kg/s]
         mdot_NOx = (x_NOx * M_NOx / M_exhaust_avg) * mdot_exhaust_total; % [kg/s]
         mdot_NNox = mdot_NOx * ((21-15)/(21 - O2_volpct));                
