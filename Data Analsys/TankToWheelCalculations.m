@@ -7,6 +7,8 @@ use_lambda = false; %if true uses AFR and lambda to guess mass flow else pumped 
 use_renewable = false; % If true it also accounts for the renewable CO2 emissions for the emissions
 use_aftertreatment = false; % If true the code accounts the aftertreatment in the emissions
 
+eta_treat_nox = 0.85;
+eta_treat_soot = 0.95;
 
 % ============================================================
 % Directories
