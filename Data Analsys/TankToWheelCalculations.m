@@ -4,6 +4,9 @@ clear; clc;
 % ============================================================
 
 use_lambda = false; %if true uses AFR and lambda to guess mass flow else pumped volume
+use_renewable = false; % If true it also accounts for the renewable CO2 emissions for the emissions
+use_aftertreatment = false; % If true the code accounts the aftertreatment in the emissions
+
 
 % ============================================================
 % Directories
@@ -78,27 +81,27 @@ R_u   = 8.314;      % J/(mol K)
 resultsDiesel = compute_g_per_MJ_with_soot_and_BS( ...
     dieselDir, dieselEmisFile, LHV_diesel, AFRst_diesel, ...
     eta_v, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
-    Vd, n_engine, nonren_diesel, use_lambda);
+    Vd, n_engine, nonren_diesel, use_lambda, use_renewable, use_aftertreatment, eta_treat_nox, eta_treat_soot);
 
 resultsHVO = compute_g_per_MJ_with_soot_and_BS( ...
     hvoDir, hvoEmisFile, LHV_hvo, AFRst_hvo, ...
     eta_v, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
-    Vd, n_engine, nonren_hvo, use_lambda);
+    Vd, n_engine, nonren_hvo, use_lambda, use_renewable, use_aftertreatment, eta_treat_nox, eta_treat_soot);
 
 resultsGTL = compute_g_per_MJ_with_soot_and_BS( ...
     gtlDir, GTLEmisFile, LHV_GTL, AFRst_GTL, ...
     eta_v, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
-    Vd, n_engine, nonren_GTL, use_lambda);
+    Vd, n_engine, nonren_GTL, use_lambda, use_renewable, use_aftertreatment, eta_treat_nox, eta_treat_soot);
 
 resultsHVODiesel = compute_g_per_MJ_with_soot_and_BS( ...
     hvo_dieselDir, hvo_dieselEmisFile, LHV_HVO_diesel, AFRst_HVO_diesel, ...
     eta_v, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
-    Vd, n_engine, nonren_HVO_diesel, use_lambda);
+    Vd, n_engine, nonren_HVO_diesel, use_lambda, use_renewable, use_aftertreatment, eta_treat_nox, eta_treat_soot);
 
 resultsGTLDiesel = compute_g_per_MJ_with_soot_and_BS( ...
     gtl_dieselDir, GTL_dieselEmisFile, LHV_GTL_diesel, AFRst_GTL_diesel, ...
     eta_v, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
-    Vd, n_engine, nonren_GTL_diesel, use_lambda);
+    Vd, n_engine, nonren_GTL_diesel, use_lambda, use_renewable, use_aftertreatment, eta_treat_nox, eta_treat_soot);
 
 % ============================================================
 % Display in command window
@@ -144,7 +147,7 @@ writetable(resultsGTLDiesel, 'Results/GTL_Diesel_g_per_MJ.csv');
 function results = compute_g_per_MJ_with_soot_and_BS( ...
     sdaqDir, emisFile, LHV_MJkg, AFRst, ...
     eta_v, M_CO, M_CO2, M_NOx, M_HC, M_exhaust, R_u, Cyl, ...
-    Vd, n_engine, nonren_factor, use_lamba)
+    Vd, n_engine, nonren_factor, use_lamba, use_renewable, use_aftertreatment, eta_treat_nox, eta_treat_soot)
 
     % Read emissions table (one row per operating point)
     emis = readtable(emisFile);
@@ -220,7 +223,7 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         % DRIFT CORRECTION (PEGGING at BDC) - Applied to all cycles
         [~, idxBDC] = min(abs(Ca(:,1) + 180));  % BDC ~ -180 deg CA
         
-        p_ref = mean(Pint);                     % intake pressure reference [Pa]
+        p_ref = mean(Pint);                    % intake pressure reference [Pa]
         
         p_corr_all = zeros(size(p));
         for i = 1:Ncycles
@@ -307,11 +310,23 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         % --------------------------------------------------------
         % Gas species mass flows [kg/s]
         % --------------------------------------------------------
+        if use_renewable == false
+            mdot_CO  = ((x_CO  * M_CO  / M_exhaust_avg) * mdot_exhaust_total)*nonren_factor; % [kg/s]
+            mdot_CO2 = ((x_CO2 * M_CO2 / M_exhaust_avg) * mdot_exhaust_total)*nonren_factor; % [kg/s]
+        else
+            mdot_CO  = ((x_CO  * M_CO  / M_exhaust_avg) * mdot_exhaust_total); % [kg/s]
+            mdot_CO2 = ((x_CO2 * M_CO2 / M_exhaust_avg) * mdot_exhaust_total); % [kg/s]
+        end
 
-        mdot_CO  = ((x_CO  * M_CO  / M_exhaust_avg) * mdot_exhaust_total)*nonren_factor; % [kg/s]
-        mdot_CO2 = ((x_CO2 * M_CO2 / M_exhaust_avg) * mdot_exhaust_total)*nonren_factor; % [kg/s]
         mdot_HC  = (x_HC  * M_HC  / M_exhaust_avg) * mdot_exhaust_total; % [kg/s]
-        mdot_NOx = (x_NOx * M_NOx / M_exhaust_avg) * mdot_exhaust_total; % [kg/s]
+        if use_aftertreatment == false
+            mdot_NOx = (x_NOx * M_NOx / M_exhaust_avg) * mdot_exhaust_total; % [kg/s]
+            C_soot_mg_m3 = (4.95/0.405) * FSN * exp(0.38 * FSN);  % [mg/m^3]
+        else
+            mdot_NOx = (x_NOx * M_NOx / M_exhaust_avg) * mdot_exhaust_total*(1-eta_treat_nox);
+            C_soot_mg_m3 = ((4.95/0.405) * FSN * exp(0.38 * FSN))*(1-eta_treat_soot);  % [mg/m^3]
+        end
+
         mdot_NNox = mdot_NOx * ((21-15)/(21 - O2_volpct));                
 
         % Emission indices [g/MJ fuel]
@@ -322,12 +337,12 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
 
         % --------------------------------------------------------
         % Soot from FSN  (AVL/ISO-like correlation)
-        % --------------------------------------------------------
-        C_soot_mg_m3 = (4.95/0.405) * FSN * exp(0.38 * FSN);  % [mg/m^3]
-
+        % --------------------------------------------------------     
         % Exhaust density & volume flow
         mdot_soot_mg_s = C_soot_mg_m3 * V_exhaust;
         EI_soot(k)     = (mdot_soot_mg_s / 1000) / Edot_MJ_s;  % [g/MJ]
+        
+        C_NNox_mg_m3   = mdot_NNox / V_exhaust * 1e6;
 
         % --------------------------------------------------------
         % GHG (gas-phase only) in g/MJ (same as before)
@@ -335,12 +350,14 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
         CO2eq_from_CO_g_per_MJ = EI_CO(k) * (M_CO2 / M_CO);
         GHG20(k)  = EI_CO2(k) + CO2eq_from_CO_g_per_MJ + EI_HC(k) * GWP20_CH4;
         GHG100(k) = EI_CO2(k) + CO2eq_from_CO_g_per_MJ + EI_HC(k) * GWP100_CH4;
+        
+
 
         % --------------------------------------------------------
         % Brake power from nominal IMEP in operating point name
         % --------------------------------------------------------
         % IMEP (using smoothed average pressure)
-        Ca_rad = deg2rad(Ca(:,1));  % Convert crank angle to radians
+        % Ca_rad = deg2rad(Ca(:,1));  % Convert crank angle to radians
         V = CylinderVolume(Ca(:,1), Cyl);  % Calculate volume at each crank angle
         W_ind = trapz(V, p_smooth);  % [J/cycle] - integrate p dV
         
@@ -397,7 +414,7 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
             BS_CO2_g_per_kWh, BS_CO2nonren_g_per_kWh, ...
             BS_CO_g_per_kWh, BS_NOx_g_per_kWh, ...
             BS_GHG20_g_per_kWh, BS_GHG100_g_per_kWh, ...
-            BS_soot_mg_per_kWh, BS_NNOx_g_per_kWh, ...
+            BS_soot_mg_per_kWh, BS_NNOx_g_per_kWh, C_NNox_mg_m3, C_soot_mg_m3,...
     'VariableNames', { ...
     'OperatingPoint','BMEP_BA' ,'mFuel_g_per_s','lambda', ...
     'EI_CO_g_per_MJ','EI_CO2_g_per_MJ', ...
@@ -409,8 +426,8 @@ function results = compute_g_per_MJ_with_soot_and_BS( ...
     'BS_CO2_g_per_kWh','BS_CO2nonren_g_per_kWh', ...
     'BS_CO_g_per_kWh','BS_NOx_g_per_kWh', ...
     'BS_GHG20_gCO2eq_per_kWh','BS_GHG100_gCO2eq_per_kWh', ...
-    'BS_soot_mg_per_kWh', 'BS_NNOx_g_per_kWh' ...
-            });
+    'BS_soot_mg_per_kWh', 'BS_NNOx_g_per_kWh', 'C_NNox_mg_m3', 'C_soot_mg_m3' ...
+     });
 
 end
 
