@@ -46,9 +46,9 @@ AFRst_GTL_diesel = 14.74;
 % Non-renewable carbon factors (0 = fully renewable, 1 = fossil)
 nonren_diesel      = 1.0;
 nonren_hvo         = 0.0;   % pure renewable (adjust if needed)
-nonren_GTL         = 0.0;   % assuming renewable source of carbon
+nonren_GTL         = 1.0;   % assuming renewable source of carbon
 nonren_HVO_diesel  = 0.5;   % 50/50 blend example (adjust if needed)
-nonren_GTL_diesel  = 0.5;
+nonren_GTL_diesel  = 1.0;
 
 % ============================================================
 % Engine & operating conditions for brake-specific metrics
